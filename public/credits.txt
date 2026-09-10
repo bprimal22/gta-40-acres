@@ -1,0 +1,55 @@
+UT Austin Campus Explorer — development build
+
+The default campus view streams Google Photorealistic 3D Tiles through Cesium ion. Live Google attribution and data credits are displayed in the game. Photographic tiles are not bundled. The optional ?offline=1 view uses independently authored campus geometry and local assets without provider requests. See the individual local asset source records below.
+
+Campus footprint and contour data: City of Austin, Watershed Protection Department. Building footprint survey 2023; elevation contours 2021. Informational data, not survey-grade reconstruction. Vertical units provisionally interpreted as US survey feet.
+Campus identities: University of Texas at Austin public campus building layer.
+Roads and paths: © OpenStreetMap contributors, Open Database License. https://www.openstreetmap.org/copyright
+Base character rig and locomotion animations: Microsoft Rocketbox, Male_Adult_01, MIT License, Copyright (c) 2020 Microsoft. https://github.com/microsoft/Microsoft-Rocketbox
+Base license: /assets/civilian/LICENSE.txt. Conversion/source manifest: /assets/civilian/sources.json.
+Public character: Microsoft Rocketbox base character with locally generated accessories. The creator's personal likeness textures are not included in this repository. Jump pose is procedural.
+Brick/concrete textures: Poly Haven, CC0. https://polyhaven.com/a/red_brick_03 and https://polyhaven.com/a/concrete_floor_02
+Main Building east limestone mineral color: Tiles 139 from ambientCG, CC0 1.0. https://ambientcg.com/a/Tiles139. Only a joint-free inset is sampled, with mirrored boundaries and adjusted color; this is a generic surface reference, not a UT limestone scan. Its published capture-method metadata conflicts, so physical scan provenance is unverified. Original bitmap and source hash are recorded in /assets/sources.json.
+Three.js: MIT. Rapier: Apache-2.0.
+
+The procedural fallback (?visual=procedural) contains unfinished architecture, vegetation placement and material approximations. The default streamed imagery also has reconstruction artifacts, especially beneath trees and in shaded entrances. This is not an official UT product and does not claim to reproduce current campus conditions.
+
+Architecture reference consulted: “University of Texas at Austin Tower viewed from the east,” Insightwm, March 3, 2024, CC BY-SA 4.0. Research photograph is not bundled in this game. https://commons.wikimedia.org/wiki/File:University_of_Texas_at_Austin_Tower_viewed_from_the_east.jpg
+Tower dimensions: University of Texas at Austin, “Tower by the Numbers” and “Dr. Battle’s Tower,” December 2025. PCL levels and entrance: UT Libraries PCL Floor Plan.
+
+Experimental Speedway walkway (?walkway=pilot):
+Herringbone Pavement by Charlotte Baglioni / Poly Haven, CC0.
+https://polyhaven.com/a/herringbone_pavement
+Generic 2 m repeating paving material; not captured at UT Austin.
+
+Playable foreground landscape (default; raw imagery comparison at ?walkway=scan):
+Island Tree 02 / Poly Haven, CC0. https://polyhaven.com/a/island_tree_02
+Three simplified meshoptimizer LODs; original PBR texture maps retained, bark color adjusted in the renderer.
+These are generic broadleaf trees. Selected positions follow the public UT TreeKeeper inventory; crown shapes and capped display heights are approximate. Exact tree species matching is outside this simplified scenery pass.
+Preparation and source checksums: /assets/foreground-tree/sources.json.
+Ground transitions blend contour-derived paving into nearby scanned ground; they are development approximations.
+
+Norman Hackerman Building: independently authored geometry guided by user-supplied photographs, UT official building footprint OBJECTID 429, and CO Architects' project photographs. Dimensions and materials are approximate. Reference photographs are research files, not pasted onto the game building.
+https://coarchitects.com/projects/science-technology/university-of-texas-at-austin-hackerman-building/
+Monochrome for Austin (2015), Nancy Rubins: photo-guided approximation of the artwork, including 70 aluminum canoes, steel support and cables. Geometry is authored for this game and is not an exact scan or engineering model. Artwork information and location: UT Landmarks.
+https://landmarks.utexas.edu/artwork/monochrome-austin
+Speedway paving/streetscape references: PWP Landscape Architecture, UT Austin Speedway and the East Mall; user-supplied Speedway photographs. Golden paving color, drain dimensions and forecourt details are approximations.
+https://www.pwpla.com/projects/uta-speedway-and-the-east-mall
+
+Gates-Dell west wings and courtyard: independently authored six-storey exteriors, stepped atrium and graded frontage, guided by UT building footprint OBJECTID 402, Pelli Clarke & Partners, STG Design, UT Landmarks, and Michael Barera's August 3, 2019 photograph (CC BY-SA 4.0). Reference photographs are retained in research, not pasted onto the game building. Building heights, finish details and adapted courtyard paths are approximate.
+https://www.stgdesign.com/projects/gates-dell-complex
+https://pcparch.com/work/gates-dell-complex-the-university-of-texas-at-austin
+https://www.mchap.co/mchap-2014-projects/bill-and-melinda-gates-computer-science-complex
+https://commons.wikimedia.org/wiki/File:University_of_Texas_at_Austin_August_2019_21_(Gates-Dell_Complex).jpg
+Circle with Towers (2005/2012), Sol LeWitt: independently modeled approximation of the eight concrete-block towers and connecting low circular wall. Overall diameter and height follow UT Landmarks; its courtyard registration and surrounding landscape are approximate.
+https://landmarks.utexas.edu/artwork/circle-towers
+
+MLK memorial / East Mall: independently authored approximate model of the campus monument by Jeffrey Varilla and Anna Koh-Varilla, guided by the user's street-level reference photographs and the sculptors' 1999 KUT interview. Official UT Landmarks & Art feature 212 supplies the map anchor. The model is not an exact scan or portrait; paving, planting and platform details are approximate. Reference photographs are retained only as research, not used as surface textures.
+https://americanarchive.org/catalog/cpb-aacip-529-jd4pk0887s
+https://alcalde.texasexes.org/2012/02/mlk-on-the-east-mall
+
+MLK East Mall ground: Clean Pebbles (Charlotte Baglioni and Dario Barresi) and Gravel Embedded Concrete (Charlotte Baglioni), Poly Haven, CC0.
+https://polyhaven.com/a/clean_pebbles
+https://polyhaven.com/a/gravel_embedded_concrete
+Local color maps are reduced to 1024px in linear light; OpenGL normal maps to 512px with vector renormalization. Color and shallow surface relief are adjusted to the user's reference photographs; these are generic material scans, not UT pavement scans. Source and derived hashes: /assets/sources.json.
+Mall lawn finish: borrows the existing Withered Grass photograph (Poly Haven, CC0), with muted dry/live color variation and approximate millimetre shading relief. Ground geometry and photographic cleanup regions remain development approximations.
