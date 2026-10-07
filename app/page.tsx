@@ -96,8 +96,13 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
         {playing && <button className="flight-toggle" type="button"
           disabled={!status.ready || status.traveling || status.mapExpanded || status.overview}
           aria-pressed={flying}
-          onClick={() => game.current?.toggleFlight()}>
-          <kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : flying ? 'Land' : 'Take off · 50 m'}
+          onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); game.current?.beginFlightHold(); }}
+          onPointerUp={() => game.current?.endFlightHold('up')}
+          onPointerCancel={() => game.current?.endFlightHold('up')}
+          onBlur={() => game.current?.endFlightHold('up')}
+          onKeyDown={e => { if((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); game.current?.beginFlightHold(); } }}
+          onKeyUp={e => { if(e.key === 'Enter' || e.key === ' ') { e.preventDefault(); game.current?.endFlightHold('up'); } }}>
+          <kbd>G</kbd> Hold to rise
         </button>}
       </header>
       <div className="compass" aria-label="Compass">
@@ -109,8 +114,8 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
           <h2>Explore the Forty Acres.</h2>
           <p>
             {status.offline
-              ? 'Walk, ride a scooter, or press G to fly over the local campus.'
-              : 'Walk, ride a scooter, or press G to fly over campus.'}
+              ? 'Walk, ride a scooter, or hold G to fly over the local campus.'
+              : 'Walk, ride a scooter, or hold G to fly over campus.'}
           </p>
           <a href={status.offline ? '/' : '/?offline=1'} style={{color:'inherit',fontSize:14}}>
             {status.offline ? 'Use photographic campus' : 'Use local-only campus'}
@@ -178,9 +183,9 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
         {flying ? <>
           <span><kbd>W A S D</kbd> Fly</span>
           <span><kbd>SPACE</kbd> Up</span>
-          <span><kbd>CTRL / C</kbd> Down</span>
-          <span><kbd>SHIFT</kbd> Soar / boost</span>
-          <span><kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : 'Land'}</span>
+          <span><kbd>↓ / C</kbd> Hold to descend</span>
+          <span><kbd>SHIFT</kbd> Boost</span>
+          <span><kbd>↑ / G</kbd> Hold to rise · release to hover</span>
           <span className="flight-readout">{status.locomotion === 'landing' ? 'Landing' : 'Flight'} · {Math.round((status.flightSpeed ?? 0) * 2.23694)} mph · {Math.round(status.flightHeight ?? 0)} m up</span>
         </> : status.locomotion && status.locomotion !== 'foot' ? <>
           <span><kbd>W</kbd> Ride</span>
@@ -188,13 +193,13 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
           <span><kbd>S / SPACE</kbd> Brake</span>
           <span><kbd>F</kbd> Get off</span>
           <span>Scooter · {Math.round((status.scooterSpeed ?? 0)*2.23694)} mph</span>
-          <span><kbd>G</kbd> Take off</span>
+          <span><kbd>G</kbd> Hold to rise</span>
         </> : <>
           <span><kbd>W A S D</kbd> Walk</span>
           <span><kbd>SHIFT</kbd> Run</span>
           <span><kbd>SPACE</kbd> Jump</span>
           <span><kbd>F</kbd> Scooter</span>
-          <span><kbd>G</kbd> Take off</span>
+          <span><kbd>G</kbd> Hold to rise</span>
         </>}
         <span>
           <kbd>MOUSE DRAG</kbd> Look
