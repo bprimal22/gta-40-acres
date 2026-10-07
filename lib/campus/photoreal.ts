@@ -318,7 +318,7 @@ export class PhotorealCampus {
     this.travelRegion.sphere.center.copy(position).applyMatrix4(this.tiles.group.matrixWorldInverse);
   }
 
-  syncCollisions(position: THREE.Vector3, preservePosition?: THREE.Vector3, ceilingY = position.y + 25) {
+  syncCollisions(position: THREE.Vector3, preservePosition?: THREE.Vector3, ceilingY = position.y + 25, airborne = false) {
     if (!this.aligned) return false;
     // Queue nearby tiles first. Geometry is cut in background workers, then
     // installed only if this exact tile entry still belongs to the live scene.
@@ -402,14 +402,17 @@ export class PhotorealCampus {
     // Install replacements before retiring old LODs, so a streaming transition
     // never deliberately leaves a frame with no ground collider.
     // A fully replaced district can have no remaining scanned triangles within
-    // the collision radius. Require prepared source coverage AND matching local
-    // authored/physical support, rather than waiting forever for a deleted tile.
+    // the collision radius. Require prepared source coverage. Grounded modes
+    // additionally need matching authored/physical footing; airborne movement
+    // does not require a floor beneath it (e.g. flying over a bank or stair gap).
     let authoredReady = false;
     if (wanted.size === 0 && this.authoredSurfaces && !this.preparationFailed &&
         active.some(({tile,entry})=>tile.geometricError<=4&&entry?.repaired) &&
         active.every(({entry})=>!entry||entry.repaired)) {
       const cached=this.authoredSupportCache;
-      if(cached?.valid&&cached.position.distanceToSquared(position)<.0625){
+      if (airborne) {
+        authoredReady = true;
+      } else if(cached?.valid&&cached.position.distanceToSquared(position)<.0625){
         authoredReady=cached.valid;
       }else{
        if (!this.collisionReady) this.physics.step();

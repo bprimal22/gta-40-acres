@@ -5,6 +5,8 @@ export const FLIGHT_TUNING = {
   boostSpeed: 38,
   climbSpeed: 12,
   boostedClimbSpeed: 20,
+  soarSpeed: 10,
+  groundClearance: 3,
   landingSpeed: 5,
   takeoffHeight: 3,
   maxHeightAboveTerrain: 240,
@@ -44,6 +46,9 @@ export class FlightMotion {
       if (input.y >= this.takeoffY - .08) this.takeoffY = null;
       else if (input.climb === 0) climb = Math.min(7, (this.takeoffY - input.y) * 4);
     }
+    // Boost + a direction soars upward. Explicit up/down input takes priority.
+    if (this.mode === 'flying' && input.boost && input.climb === 0 && horizontal.lengthSq() > 0)
+      climb = Math.max(climb, FLIGHT_TUNING.soarSpeed);
     if (this.mode === 'landing') climb = -FLIGHT_TUNING.landingSpeed;
     const target = horizontal.multiplyScalar(speed); target.y = climb;
     if (target.length() > (input.boost ? FLIGHT_TUNING.boostSpeed : FLIGHT_TUNING.cruiseSpeed))
