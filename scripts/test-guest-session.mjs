@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import ts from 'typescript';
+import { Miniflare } from 'miniflare';
 import { guestHandler } from '../demo/guest-worker.mjs';
 
 const origin = 'https://gta40acres.pages.dev', day = 86400000;
@@ -10,7 +11,8 @@ let endpoint = 'https://tile.googleapis.com/v1/3dtiles/root.json?key=fixture-goo
 const handle = guestHandler({ now: () => clock, upstreamFetch: async (url, options) => {
   calls++; assert.equal(url, 'https://api.cesium.com/v1/assets/2275207/endpoint');
   assert.equal(options.headers.Authorization, 'Bearer fixture-owner-token');
-  assert.equal(options.headers.Referer, origin + '/'); assert.equal(options.redirect, 'error');
+  assert.equal(options.headers.Referer, origin + '/'); assert.equal(options.headers.Origin, origin);
+  assert.equal(options.redirect, 'manual');
   return Response.json({ type: '3DTILES', externalType: '3DTILES', options: { url: endpoint } }, { status: upstreamStatus });
 } });
 const request = (method = 'POST', cookie, headers = {}) => new Request(origin + '/api/guest-session', { method, headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}), ...headers } });
@@ -76,4 +78,32 @@ globalThis.fetch = async () => new Response('<html>old static host</html>');
 assert.equal((await client.guestSession(true)).status, 'unavailable');
 globalThis.fetch = async () => Response.json({ status: 'active', serverNow: clock, expiresAt: clock + day, config: { assetId: 2275207, endpointUrl: 'https://other.example/root.json?key=fixture' } });
 assert.equal((await client.guestSession(true)).status, 'unavailable');
-console.log(JSON.stringify({ passed: true, coverage: ['first visit cookie handshake', '24 hours from first visit', 'reload preserves deadline', 'exact expiry blocks provider calls', 'tampered cookie', 'cross-origin rejection', 'disabled/missing secrets', 'provider quota/error', 'owner token stays server-side', 'no API caching', 'static routing', 'browser API handshake', 'blocked cookies', 'expired browser response', 'unsupported endpoint'], liveProviderCalls: 0 }));
+// Use the actual Workers runtime too: Node accepts redirect: 'error', but
+// Cloudflare rejects it before a request is sent. No live credentials or calls.
+let runtimeCalls = 0, runtimeRedirect = false;
+const runtime = new Miniflare({
+  modules: true, compatibilityDate: '2026-05-01',
+  scriptPath: new URL('../demo/guest-worker.mjs', import.meta.url).pathname,
+  bindings: { GUEST_ENABLED: env.GUEST_ENABLED, GUEST_CESIUM_TOKEN: env.GUEST_CESIUM_TOKEN, GUEST_COOKIE_SECRET: env.GUEST_COOKIE_SECRET },
+  outboundService: async request => {
+    runtimeCalls++;
+    assert.equal(request.url, 'https://api.cesium.com/v1/assets/2275207/endpoint');
+    assert.equal(request.headers.get('Authorization'), 'Bearer fixture-owner-token');
+    if (runtimeRedirect) return new Response(null, { status: 302, headers: { Location: 'https://other.example' } });
+    return Response.json({ type: '3DTILES', externalType: '3DTILES', options: { url: endpoint } });
+  },
+});
+try {
+  const first = await runtime.dispatchFetch(origin + '/api/guest-session', { method: 'POST', headers: { Origin: origin } });
+  const runtimeCookie = first.headers.get('set-cookie').split(';')[0];
+  const options = { method: 'POST', headers: { Origin: origin, Cookie: runtimeCookie } };
+  const active = await runtime.dispatchFetch(origin + '/api/guest-session', options);
+  assert.equal(active.status, 200); assert.equal((await active.json()).status, 'active');
+  assert.equal(runtimeCalls, 1);
+  runtimeRedirect = true;
+  const redirect = await runtime.dispatchFetch(origin + '/api/guest-session', options);
+  assert.equal(redirect.status, 503);
+  assert.equal((await redirect.json()).reason, 'provider-302');
+  assert.equal(runtimeCalls, 2, 'Do not follow redirects with the owner bearer token');
+} finally { await runtime.dispose(); }
+console.log(JSON.stringify({ passed: true, coverage: ['first visit cookie handshake', '24 hours from first visit', 'reload preserves deadline', 'exact expiry blocks provider calls', 'tampered cookie', 'cross-origin rejection', 'disabled/missing secrets', 'provider quota/error', 'owner token stays server-side', 'no API caching', 'static routing', 'browser API handshake', 'blocked cookies', 'expired browser response', 'unsupported endpoint', 'Cloudflare runtime request compatibility', 'redirect rejection without credential forwarding'], liveProviderCalls: 0 }));

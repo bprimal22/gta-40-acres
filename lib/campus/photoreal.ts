@@ -318,7 +318,7 @@ export class PhotorealCampus {
     this.travelRegion.sphere.center.copy(position).applyMatrix4(this.tiles.group.matrixWorldInverse);
   }
 
-  syncCollisions(position: THREE.Vector3, preservePosition?: THREE.Vector3) {
+  syncCollisions(position: THREE.Vector3, preservePosition?: THREE.Vector3, ceilingY = position.y + 25) {
     if (!this.aligned) return false;
     // Queue nearby tiles first. Geometry is cut in background workers, then
     // installed only if this exact tile entry still belongs to the live scene.
@@ -356,7 +356,7 @@ export class PhotorealCampus {
       if (
         Math.hypot(dx, dz) < 38 &&
         b.max.y > position.y - 20 &&
-        b.min.y < position.y + 25
+        b.min.y < ceilingY
       )
         wanted.add(entry);
     }

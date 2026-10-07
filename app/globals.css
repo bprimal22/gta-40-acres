@@ -353,6 +353,12 @@ button {
   font-size: 14px;
 }
 .riding-controls { column-gap: 14px; row-gap: 10px; font-size: 13px; }
+.flying-controls { column-gap: 16px; row-gap: 10px; font-size: 13px; }
+.flight-readout { padding: 7px 11px; border-radius: 6px; background: #162b24de; color: #ffe1b7; }
+.flight-toggle { display: block; margin-top: 12px; padding: 8px 12px; border: 1px solid #ffffff66; border-radius: 6px; background: #162b24df; color: #fff; font-size: 13px; cursor: pointer; pointer-events: auto; }
+.flight-toggle kbd { margin-right: 7px; font: inherit; color: #ffd5a8; }
+.flight-toggle:disabled { opacity: .45; cursor: default; }
+.flight-toggle:focus-visible { outline: 2px solid #ffd5a8; outline-offset: 3px; }
 .controls span {
   white-space: nowrap;
 }

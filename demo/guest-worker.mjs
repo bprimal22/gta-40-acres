@@ -70,7 +70,9 @@ export function guestHandler({ now = Date.now, upstreamFetch = fetch } = {}) {
     try {
       const response = await upstreamFetch('https://api.cesium.com/v1/assets/2275207/endpoint', {
         headers: { Authorization: `Bearer ${env.GUEST_CESIUM_TOKEN}`, Referer: origin + '/', Origin: origin },
-        cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15000),
+        // Workers supports manual/follow, but rejects redirect: 'error'.
+        // Manual keeps the bearer on this host; the !ok check rejects redirects.
+        cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(15000),
       });
       if (!response.ok) return json({ status: 'unavailable', reason: `provider-${response.status}` }, 503);
       const data = await response.json();
