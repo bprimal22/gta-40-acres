@@ -62,3 +62,5 @@ https://www.tspb.texas.gov/prop/tc/tc-architecture/index.html
 Texas State Capitol exterior and grounds: City of Austin 2023 building footprint 533822 supplies alignment and approximate massing; State Preservation Board north/south photographs, site map and monument guide supply architectural and landscape references. Reference photographs and PDFs are not bundled textures. Independently authored stone, paving and lawn shaders; reused bundled foreground tree asset (credited above).
 https://tspb.texas.gov/plan/maps/maps.html
 https://tspb.texas.gov/prop/tcg/tcg-monuments/index.html
+
+Capitol south portico: photo-guided deep arch, radial stonework, paired piers, balcony and medallions; approximate authored geometry.

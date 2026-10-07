@@ -151,22 +151,55 @@ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(${new T.Color(0x928573).toArray().joi
   for(const side of [-1,1]){
     const front=side===-1?-50:39;
     for(const u of [-5,3.5,12]){
-      const placement=new T.Matrix4().makeRotationY(side<0?Math.PI:0).setPosition(u,5.4,front);
+      const doorFront=side<0?front:37.25;
+      const placement=new T.Matrix4().makeRotationY(side<0?Math.PI:0).setPosition(u,5.4,doorFront);
       const g=new T.ShapeGeometry(arch(3.0,5.7),18).applyMatrix4(placement);put(g,glass);
-      box(u,5.4,front+side*.04,.065,5.6,.08,frame);
-      box(u,3.05,front,3.25,.25,.7,trim);
+      box(u,5.4,doorFront+side*.04,.065,5.6,.08,frame);
+      box(u,3.05,doorFront,3.25,.25,.7,trim);
     }
-    for(const u of [-11,-3.5,3.5,10.5,18]){
-      column(u,front,15.4,13.4,.68,stone);
-      column(u,front,8.7,.5,.95,trim);column(u,front,22.25,.65,1.05,trim);
-    }
-    box(3.5,23.05,front,31,.8,4,trim);
-    if(side===1){
-      // The south facade's defining recessed arch spans the upper portico.
-      const outer=arch(20,19),inner=arch(16.8,16.5);
-      outer.holes.push(new T.Path(inner.getPoints(24)));
-      put(new T.ExtrudeGeometry(outer,{depth:1.5,bevelEnabled:false,curveSegments:32}).translate(3.5,20.5,front-.2),trim);
-      for(const u of[-7,14])box(u,14.7,front+.6,2.2,14.5,2.0,stone);
+    if(side===-1){
+      for(const u of [-11,-3.5,3.5,10.5,18]){
+        column(u,front,15.4,13.4,.68,stone);
+        column(u,front,8.7,.5,.95,trim);column(u,front,22.25,.65,1.05,trim);
+      }
+      box(3.5,23.05,front,31,.8,4,trim);
+    }else{
+      // South entrance: a deep stone arch on paired piers. The photo's
+      // recessed balcony and doors sit behind it, not on a flat facade decal.
+      const outer=new T.Shape(arch(22.4,23.3).getPoints(48).map(p=>p.add(new T.Vector2(0,.45))));
+      outer.holes.push(new T.Path(arch(19.6,21.4).getPoints(48)));
+      put(new T.ExtrudeGeometry(outer,{depth:3.3,bevelEnabled:false,curveSegments:48}).translate(3.5,14,front-1.2),stone);
+      // Separate radial voussoirs and keystone give the arch real relief.
+      for(let i=0;i<19;i++){
+        const a=i*Math.PI/19+.008,b=(i+1)*Math.PI/19-.008;
+        const shape=new T.Shape();shape.moveTo(Math.cos(a)*9.8,Math.sin(a)*9.8);
+        shape.absarc(0,0,9.8,a,b,false);shape.lineTo(Math.cos(b)*11.2,Math.sin(b)*11.2);
+        shape.absarc(0,0,11.2,b,a,true);shape.closePath();
+        put(new T.ExtrudeGeometry(shape,{depth:.24,bevelEnabled:false,curveSegments:8}).translate(3.5,14.9,front+2.12),trim);
+      }
+      box(3.5,25.65,front+2.35,1.25,2.0,.55,trim);
+      for(const sidePier of[-1,1])for(const offset of[12.2,15.6]){
+        const u=3.5+sidePier*offset;
+        box(u,14.1,front+.8,1.65,21.4,1.8,stone);
+        box(u,14.1,front+1.76,.22,19.9,.15,trim);
+        box(u,3.3,front+1.0,2.1,.5,2.2,trim);
+        box(u,24.9,front+1.0,2.2,.7,2.3,trim);
+      }
+      box(3.5,8.9,front-.45,19.4,.55,2.0,trim);
+      box(3.5,10.45,front+.22,19.4,.22,.38,trim);
+      for(let i=0;i<27;i++)column(-5.8+i*.715,front+.22,9.65,1.3,.09,trim);
+      box(3.5,26.65,front+.65,33,.72,4.7,trim);
+      box(3.5,27.2,front+.6,34,.38,5.1,stone);
+      // Attic storey and seven medallions below the pediment.
+      box(3.5,29.7,front+.35,30.5,4.3,2.5,stone);
+      for(let i=0;i<7;i++){
+        const u=-8.5+i*4;
+        box(u,30.0,front+1.7,2.65,2.7,.32,trim);
+        put(new T.CircleGeometry(.67,24).translate(u,30.0,front+1.89),roof);
+        put(new T.TorusGeometry(.67,.085,8,24).translate(u,30.0,front+1.91),trim);
+        const star=new T.Shape();for(let j=0;j<10;j++){const a=Math.PI/2+j*Math.PI/5,r=j%2?.20:.48;const x=Math.cos(a)*r,y=Math.sin(a)*r;if(j===0)star.moveTo(x,y);else star.lineTo(x,y);}star.closePath();
+        put(new T.ExtrudeGeometry(star,{depth:.045,bevelEnabled:false}).translate(u,30.0,front+1.93),trim);
+      }
     }
     // Pediment is a thick triangular prism, not a flat photograph.
     const tri=new T.Shape();tri.moveTo(-16,0);tri.lineTo(16,0);tri.lineTo(0,6.5);tri.closePath();
@@ -174,7 +207,11 @@ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(${new T.Color(0x928573).toArray().joi
     box(3.5,32.5,front,33,.42,1.8,trim);
     const ring=new T.TorusGeometry(.82,.12,8,24).translate(3.5,35.2,front+side*.7);put(ring,trim);
     const seal=new T.CircleGeometry(.69,24).rotateY(side<0?Math.PI:0).translate(3.5,35.2,front+side*.72);put(seal,roof);
-    for(let i=0;i<7;i++)box(-8.5+i*4,30.5,front+side*.7,1.4,1.4,.1,trim);
+    if(side===-1)for(let i=0;i<7;i++)box(-8.5+i*4,30.5,front+side*.7,1.4,1.4,.1,trim);
+    for(const sideRoof of[-1,1]){
+      const a=new T.Vector3(3.5+sideRoof*16,32.65,front+side*.75),b=new T.Vector3(3.5,39.15,front+side*.75);
+      put(new T.TubeGeometry(new T.LineCurve3(a,b),1,.18,8,false),trim);
+    }
     // Short stairs are real stairs; side circulation is the rideable route.
     const ground=capitolGroundHeight(3.5,front+side*8),rise=(3.1-ground)/5;
     for(let i=0;i<5;i++)box(3.5,ground+rise*(i+1)/2,front+side*(5-i)*.55,30,rise*(i+1),.55,path);
@@ -262,5 +299,5 @@ diffuseColor.rgb=mix(diffuseColor.rgb,vec3(${new T.Color(0x928573).toArray().joi
   const meshes:T.Mesh[]=[];
   for(const[m,parts]of batches){const flat=parts.map(g=>g.index?g.toNonIndexed():g),g=mergeGeometries(flat)!;g.computeBoundingBox();g.computeBoundingSphere();const mesh=new T.Mesh(g,m);mesh.name=m.name;mesh.castShadow=m!==lawn&&m!==path;mesh.receiveShadow=true;meshes.push(mesh);for(const part of new Set([...parts,...flat]))part.dispose();}
   return {meshes,materials,volumes,trees,colliderGeometries:meshes.map(m=>m.geometry),
-    stats:{scope:'Complete Capitol exterior, bounded north terrace and south grounds',approximateDimensions:true,footprintSource:footprint.source,windows:windowCount,trees:trees.length,lamps:lampSites.length,approximateMonuments:monuments.length,preservedNorthExtension:true,triangles:meshes.reduce((n,m)=>n+m.geometry.attributes.position.count/3,0),materialBatches:meshes.length,groundGrade:.052,sourceCutVolumes:volumes.length}};
+    stats:{scope:'Complete Capitol exterior, bounded north terrace and south grounds',frontPortico:'Deep south arch, radial stonework, paired piers, recessed balcony and medallions',approximateDimensions:true,footprintSource:footprint.source,windows:windowCount,trees:trees.length,lamps:lampSites.length,approximateMonuments:monuments.length,preservedNorthExtension:true,triangles:meshes.reduce((n,m)=>n+m.geometry.attributes.position.count/3,0),materialBatches:meshes.length,groundGrade:.052,sourceCutVolumes:volumes.length}};
 }

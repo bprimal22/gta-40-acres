@@ -31,6 +31,7 @@ import { buildScooterModel } from './scooter-model';
 import { createScooterPose } from './scooter-pose';
 import { ScooterClearance } from './scooter-clearance';
 import { FlightMotion, FLIGHT_TUNING } from './flight-motion';
+import { findFlightLanding } from './flight-landing';
 import { createFlightPose } from './flight-pose';
 import type { CampusData, TerrainData, GameStatus, Point } from './types';
 
@@ -81,6 +82,10 @@ export class CampusGame {
   private flightMessageUntil = 0;
   private flightGroundTarget: number | null = null;
   private flightGroundLift = 0;
+  private flightLandingTarget: THREE.Vector3 | null = null;
+  private flightLandingProbeAt = 0;
+  private flightLandingMarker = new THREE.Mesh(new THREE.RingGeometry(.9, 1.15, 32),
+    new THREE.MeshBasicMaterial({ color: 0xeac17d, transparent: true, opacity: .8, side: THREE.DoubleSide, depthWrite: false }));
   private scooterGround = new LocalGroundQuery();
   private riderStationary = 1;
   readonly scooter = new ScooterMotion(RUN_SPEED);
@@ -156,13 +161,16 @@ export class CampusGame {
     this.renderer.domElement.tabIndex = 0;
     this.renderer.domElement.setAttribute(
       'aria-label',
-      'UT Austin exploration game. WASD to move, Shift to run or boost, Space to jump or fly up. G takes off or lands; Control or C flies down. F mounts or dismounts the scooter. Drag mouse to look.',
+      'UT Austin exploration game. WASD to move, Shift to run or boost, Space to jump or fly up. G rises to 50 metres or lands safely; Control or C flies down. F mounts or dismounts the scooter. Drag mouse to look.',
     );
     this.host.appendChild(this.renderer.domElement);
     this.camera.aspect = host.clientWidth / host.clientHeight;
     this.camera.updateProjectionMatrix();
     this.scene.background = new THREE.Color(0xb5ced9);
     this.scene.fog = new THREE.FogExp2(0xb5ced9, 0.00065);
+    this.flightLandingMarker.rotation.x = -Math.PI / 2;
+    this.flightLandingMarker.visible = false;
+    this.scene.add(this.flightLandingMarker);
     const sky = this.sky = new Sky();
     sky.scale.setScalar(10000);
     sky.material.uniforms.turbidity.value = 2.3;
@@ -932,19 +940,25 @@ export class CampusGame {
     if (this.flight.active) this.flight.toggleLanding();
     else {
       this.leaveScooter();
-      this.flight.start(this.body.translation().y);
+      const p = this.body.translation();
+      const ground = this.world.terrain.height(p.x, p.z) + .905;
+      this.flight.start(p.y, Math.min(ground + FLIGHT_TUNING.maxHeightAboveTerrain,
+        Math.max(p.y + 3, ground + FLIGHT_TUNING.takeoffHeight)));
       this.avatar.rotation.order = 'YXZ';
       this.controller.disableSnapToGround(); this.controller.disableAutostep();
       this.grounded = false;
     }
     this.keys.clear(); this.pressedAt.clear(); this.jumpQueued = false;
     this.vertical = 0; this.velocity.set(0, 0, 0);
+    this.flightLandingTarget = null; this.flightLandingProbeAt = 0;
+    this.flightLandingMarker.visible = false;
     this.flightMessage = ''; this.scooterMessage = ''; this.lastHud = 0;
     this.renderer.domElement.focus();
   }
   private leaveFlight() {
     this.flightPose?.restore(); this.flight.stop(); this.flightLean = 0;
     this.flightGroundTarget = null; this.flightGroundLift = 0;
+    this.flightLandingTarget = null; this.flightLandingMarker.visible = false;
     this.avatar.rotation.x = 0; this.avatar.rotation.z = 0;
     this.controller.enableSnapToGround(.38); this.controller.enableAutostep(.32, .2, false);
     this.vertical = 0; this.velocity.set(0, 0, 0); this.jumpQueued = false;
@@ -953,11 +967,26 @@ export class CampusGame {
     const p = this.body.translation();
     const enabled = this.active && !this.overview && !this.mapExpanded;
     const climb = (held('Space') ? 1 : 0) - (held('ControlLeft') || held('ControlRight') || held('KeyC') ? 1 : 0);
+    const steering = held('KeyW') || held('KeyS') || held('KeyA') || held('KeyD');
+    if (enabled && this.flight.mode === 'landing' && performance.now() >= this.flightLandingProbeAt) {
+      this.flightLandingProbeAt = performance.now() + 200;
+      this.flightLandingTarget = this.scooterCollisionReady
+        ? findFlightLanding(this.physics, this.collider, p,
+          this.photoreal ? (x, z, y, distance) => this.photoreal!.surface(x, z, y, distance) : undefined,
+          steering ? null : this.flightLandingTarget) : null;
+      if (!this.flightLandingTarget) {
+        this.flightMessage = this.scooterCollisionReady ? 'No clear landing below. Move toward an open path · G resumes flight.' : 'Preparing the landing surface…';
+        this.flightMessageUntil = performance.now() + 600;
+      }
+    }
     const requested = this.flight.update(dt, {
       forward: (held('KeyW') ? 1 : 0) - (held('KeyS') ? 1 : 0),
       strafe: (held('KeyD') ? 1 : 0) - (held('KeyA') ? 1 : 0),
       climb, boost: held('ShiftLeft') || held('ShiftRight'), yaw: this.yaw, y: p.y, enabled,
+      x: p.x, z: p.z, landingTarget: this.flightLandingTarget,
     });
+    this.flightLandingMarker.visible = enabled && this.flight.mode === 'landing' && this.flightLandingTarget !== null;
+    if (this.flightLandingTarget) this.flightLandingMarker.position.set(this.flightLandingTarget.x, this.flightLandingTarget.y - .87, this.flightLandingTarget.z);
     const terrainY = this.world.terrain.height(p.x, p.z);
     const delta = requested.clone().multiplyScalar(dt);
     const [west, north, east, south] = this.world.data.bounds;
@@ -1004,6 +1033,10 @@ export class CampusGame {
     const supported = characterSupported(this.controller, p.y, requested.y);
     this.contacts = this.controller.numComputedCollisions();
     this.flight.blocked = new THREE.Vector3(movement.x, movement.y, movement.z).distanceTo(delta) > .015;
+    if (enabled && this.flight.mode === 'landing' && this.flight.blocked && !supported && Math.hypot(movement.x, movement.z) < .001) {
+      this.flightMessage = 'Landing route blocked. Steer toward an open path · G resumes flight.';
+      this.flightMessageUntil = performance.now() + 600;
+    }
     if (this.flight.takeoffY !== null && this.flight.blocked && movement.y < delta.y - .01) this.flight.takeoffY = null;
     this.body.setNextKinematicTranslation({ x: p.x + movement.x, y: p.y + movement.y, z: p.z + movement.z });
     this.physics.step();
@@ -1661,6 +1694,7 @@ export class CampusGame {
         candidate: this.travel?.candidates[this.travel.index], message: this.travelMessage },
       scooter: {...this.scooter.snapshot(),support:this.scooterSupport,collisionReady:this.scooterCollisionReady,groundQuery:{...this.scooterGround.stats},queryMs:this.scooterQueryMs.length ? {mean:this.scooterQueryMs.reduce((a,b)=>a+b,0)/this.scooterQueryMs.length,max:Math.max(...this.scooterQueryMs)} : null,model:this.scooterVisual?.stats,pose:this.scooterPose?.diagnostics({includeBounds:includeCharacterBounds})},
       flight: { mode: this.flight.mode, velocity: this.flight.velocity.toArray(), speed: this.flight.active ? this.velocity.length() : 0,
+        landingTarget: this.flightLandingTarget?.toArray() ?? null,
         heightAboveTerrain: p ? Math.max(0, p.y - .905 - this.world.terrain.height(p.x, p.z)) : 0,
         lean: this.flightLean, blocked: this.flight.blocked, groundTarget: this.flightGroundTarget,
         groundLift: this.flightGroundLift, tuning: FLIGHT_TUNING },
