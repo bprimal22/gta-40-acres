@@ -44,6 +44,7 @@ export interface GameStatus {
   flightSpeed?: number;
   flightHeight?: number;
   flightMessage?: string;
+  flightHolding?: boolean;
   scooterSpeed?: number;
   rideMessage?: string;
   heading?: string;
