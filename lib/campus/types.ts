@@ -40,7 +40,10 @@ export interface GameStatus {
   mode: string;
   /** True when the game is using only files bundled with the local app. */
   offline?: boolean;
-  locomotion?: 'foot'|'mounting'|'riding'|'dismounting';
+  locomotion?: 'foot'|'mounting'|'riding'|'dismounting'|'flying'|'landing';
+  flightSpeed?: number;
+  flightHeight?: number;
+  flightMessage?: string;
   scooterSpeed?: number;
   rideMessage?: string;
   heading?: string;

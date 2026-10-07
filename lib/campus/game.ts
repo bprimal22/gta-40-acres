@@ -29,6 +29,8 @@ import { ScooterMotion, SCOOTER_TUNING } from './scooter-motion';
 import { buildScooterModel } from './scooter-model';
 import { createScooterPose } from './scooter-pose';
 import { ScooterClearance } from './scooter-clearance';
+import { FlightMotion, FLIGHT_TUNING } from './flight-motion';
+import { createFlightPose } from './flight-pose';
 import type { CampusData, TerrainData, GameStatus, Point } from './types';
 
 export class CampusGame {
@@ -71,6 +73,11 @@ export class CampusGame {
   pitch = 0.08;
   distance = 5.4;
   velocity = new THREE.Vector3();
+  readonly flight = new FlightMotion();
+  private flightPose?: ReturnType<typeof createFlightPose>;
+  private flightLean = 0;
+  private flightMessage = '';
+  private flightMessageUntil = 0;
   private scooterGround = new LocalGroundQuery();
   private riderStationary = 1;
   readonly scooter = new ScooterMotion(RUN_SPEED);
@@ -146,7 +153,7 @@ export class CampusGame {
     this.renderer.domElement.tabIndex = 0;
     this.renderer.domElement.setAttribute(
       'aria-label',
-      'UT Austin exploration game. WASD to walk, Shift to run, Space to jump. F mounts or dismounts the scooter; W rides, A and D steer, S or Space brakes. Drag mouse to look.',
+      'UT Austin exploration game. WASD to move, Shift to run or boost, Space to jump or fly up. G takes off or lands; Control or C flies down. F mounts or dismounts the scooter. Drag mouse to look.',
     );
     this.host.appendChild(this.renderer.domElement);
     this.camera.aspect = host.clientWidth / host.clientHeight;
@@ -352,6 +359,7 @@ export class CampusGame {
     this.scooterVisual.root.visible = false;
     this.scene.add(this.scooterVisual.root);
     this.scooterPose = createScooterPose(model);
+    this.flightPose = createFlightPose(model);
     this.avatar.rotation.y = this.yaw + Math.PI;
     const x = this.photoreal || this.walkway ? this.spawn.x : 0,
       z = this.photoreal || this.walkway ? this.spawn.z : 35,
@@ -648,6 +656,7 @@ export class CampusGame {
       const landing = travelLanding(this.physics, this.collider, point, target.y - .905, surface);
       if (landing) {
         this.leaveScooter();
+        this.leaveFlight();
         this.body.setTranslation(landing, true); this.body.setNextKinematicTranslation(landing);
         this.previousPosition.copy(landing); this.focus.copy(landing).add(new THREE.Vector3(0, .6, 0));
         this.physics.step(); this.accumulator = 0; this.vertical = 0; this.grounded = true;
@@ -695,6 +704,9 @@ export class CampusGame {
         if (e.code === 'KeyF' && this.active && !this.overview) {
           e.preventDefault(); if(!e.repeat)this.toggleScooter(); return;
         }
+        if (e.code === 'KeyG' && this.active && !this.overview) {
+          e.preventDefault(); if (!e.repeat) this.toggleFlight(); return;
+        }
         if (
           [
             'KeyW',
@@ -704,6 +716,9 @@ export class CampusGame {
             'Space',
             'ShiftLeft',
             'ShiftRight',
+            'ControlLeft',
+            'ControlRight',
+            'KeyC',
             'ArrowLeft',
             'ArrowRight',
             'ArrowUp',
@@ -714,7 +729,7 @@ export class CampusGame {
             e.preventDefault();
             this.keys.add(e.code);
             if (!e.repeat) this.pressedAt.set(e.code, performance.now());
-            if (e.code === 'Space' && !e.repeat && !this.scooter.mounted) this.jumpQueued = true;
+            if (e.code === 'Space' && !e.repeat && !this.scooter.mounted && !this.flight.active) this.jumpQueued = true;
           }
         }
         if (e.code === 'Escape') {
@@ -755,6 +770,7 @@ export class CampusGame {
       this.pressedAt.clear();
       dragging = false;
       this.jumpQueued = false;
+      this.flight.pause();
     };
     window.addEventListener('blur', clear, options);
     document.addEventListener(
@@ -882,6 +898,7 @@ export class CampusGame {
   }
   private toggleScooter() {
     if(!this.ready || !this.scooterClearance || !this.scooterVisual)return;
+    if (this.flight.active) { this.notifyRide('Press G to land before riding.'); return; }
     if(this.scooter.mode === 'foot') {
       if(!this.grounded || !this.scooterCollisionReady) { this.notifyRide('Move onto a clear path to ride.'); return; }
       this.prepareScooterGround();
@@ -892,6 +909,77 @@ export class CampusGame {
       this.scooterMessage = ''; this.scooterWarningLatched = false; this.scooterParkedUntil = 0;
     } else this.scooter.requestDismount();
     this.lastHud = 0;
+  }
+  toggleFlight() {
+    if (!this.ready || !this.active || this.overview || this.mapExpanded || this.travel) return;
+    if (this.flight.active) this.flight.toggleLanding();
+    else {
+      this.leaveScooter();
+      this.flight.start(this.body.translation().y);
+      this.avatar.rotation.order = 'YXZ';
+      this.controller.disableSnapToGround(); this.controller.disableAutostep();
+      this.grounded = false;
+    }
+    this.keys.clear(); this.pressedAt.clear(); this.jumpQueued = false;
+    this.vertical = 0; this.velocity.set(0, 0, 0);
+    this.flightMessage = ''; this.scooterMessage = ''; this.lastHud = 0;
+    this.renderer.domElement.focus();
+  }
+  private leaveFlight() {
+    this.flightPose?.restore(); this.flight.stop(); this.flightLean = 0;
+    this.avatar.rotation.x = 0; this.avatar.rotation.z = 0;
+    this.controller.enableSnapToGround(.38); this.controller.enableAutostep(.32, .2, false);
+    this.vertical = 0; this.velocity.set(0, 0, 0); this.jumpQueued = false;
+  }
+  private stepFlight(dt: number, held: (code: string) => boolean) {
+    const p = this.body.translation();
+    const enabled = this.active && !this.overview && !this.mapExpanded;
+    const climb = (held('Space') ? 1 : 0) - (held('ControlLeft') || held('ControlRight') || held('KeyC') ? 1 : 0);
+    const requested = this.flight.update(dt, {
+      forward: (held('KeyW') ? 1 : 0) - (held('KeyS') ? 1 : 0),
+      strafe: (held('KeyD') ? 1 : 0) - (held('KeyA') ? 1 : 0),
+      climb, boost: held('ShiftLeft') || held('ShiftRight'), yaw: this.yaw, y: p.y, enabled,
+    });
+    const terrainY = this.world.terrain.height(p.x, p.z);
+    const delta = requested.clone().multiplyScalar(dt);
+    const [west, north, east, south] = this.world.data.bounds;
+    delta.x = THREE.MathUtils.clamp(p.x + delta.x, west + 2, east - 2) - p.x;
+    delta.z = THREE.MathUtils.clamp(p.z + delta.z, north + 2, south - 2) - p.z;
+    delta.y = Math.min(delta.y, Math.max(0, terrainY + FLIGHT_TUNING.maxHeightAboveTerrain - p.y));
+    // Await nearby ground/roof collision data before descending into a new
+    // district. Upward escape remains available while streamed scenery loads.
+    if (this.photoreal && !this.scooterCollisionReady && p.y < terrainY + 12) {
+      delta.x = 0; delta.z = 0; delta.y = Math.max(0, delta.y);
+      if (requested.y < 0 || Math.hypot(requested.x, requested.z) > .2) {
+        this.flightMessage = 'Loading nearby scenery… climb or wait.';
+        this.flightMessageUntil = performance.now() + 600;
+      }
+    }
+    this.previousPosition.set(p.x, p.y, p.z);
+    this.controller.computeColliderMovement(this.collider, delta);
+    const movement = this.controller.computedMovement();
+    const supported = characterSupported(this.controller, p.y, requested.y);
+    this.contacts = this.controller.numComputedCollisions();
+    this.flight.blocked = new THREE.Vector3(movement.x, movement.y, movement.z).distanceTo(delta) > .015;
+    if (this.flight.takeoffY !== null && this.flight.blocked && movement.y < delta.y - .01) this.flight.takeoffY = null;
+    this.body.setNextKinematicTranslation({ x: p.x + movement.x, y: p.y + movement.y, z: p.z + movement.z });
+    this.physics.step();
+    this.velocity.set(movement.x / dt, movement.y / dt, movement.z / dt);
+    this.vertical = this.velocity.y; this.grounded = false;
+    const speed = Math.hypot(movement.x, movement.z) / dt;
+    if (speed > .15) {
+      const heading = Math.atan2(movement.x, movement.z);
+      this.avatar.rotation.y += (THREE.MathUtils.euclideanModulo(heading - this.avatar.rotation.y + Math.PI, Math.PI * 2) - Math.PI) * (1 - Math.exp(-dt * 7));
+    }
+    if (this.action !== 'Idle') {
+      this.actions[this.action]?.fadeOut(.18); this.actions.Idle?.reset().fadeIn(.18).play(); this.action = 'Idle';
+    }
+    this.mixer?.update(dt);
+    if (enabled && requested.y < -.1 && supported) {
+      this.leaveFlight(); this.grounded = true;
+      this.flightMessage = 'Landed. WASD to walk · G to take off again.';
+      this.flightMessageUntil = performance.now() + 3000; this.lastHud = 0;
+    }
   }
   private updateScooterVisual(position: {x:number;y:number;z:number}) {
     const model=this.scooterVisual;
@@ -985,6 +1073,7 @@ export class CampusGame {
     else { this.scooterPose?.restore();this.avatar.rotation.x=0;this.avatar.rotation.z=0; }
   }
   step(dt: number) {
+    this.flightPose?.restore();
     this.scooterPose?.restore();
     const held = (code: string) =>
       this.keys.has(code) ||
@@ -998,6 +1087,7 @@ export class CampusGame {
     if (this.keys.has('ArrowDown'))
       this.pitch = Math.min(1.12, this.pitch + dt * 0.8);
     if(this.scooter.mounted) { this.stepScooter(dt,held);return; }
+    if(this.flight.active) { this.stepFlight(dt,held);return; }
     const input = new THREE.Vector3(strafe, 0, -forward);
     if (input.lengthSq() > 0) input.normalize();
     input.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
@@ -1117,7 +1207,10 @@ export class CampusGame {
     if (this.photoreal) {
       const current = this.body.translation();
       const position = new THREE.Vector3(current.x, current.y, current.z);
-      this.photoreal.update(position);
+      const groundAnchor = this.flight.active
+        ? new THREE.Vector3(position.x, this.world.terrain.height(position.x, position.z) + .92, position.z)
+        : position;
+      this.photoreal.update(groundAnchor);
       this.walkway?.stitchGround(this.physics, position, (x, z, referenceY) =>
         this.photoreal!.groundEdge(x, z, referenceY),
       );
@@ -1176,7 +1269,8 @@ export class CampusGame {
         return;
       }
       const previousChanges = this.photoreal.collisionChanges;
-      this.scooterCollisionReady = this.photoreal.syncCollisions(position);
+      this.scooterCollisionReady = this.photoreal.syncCollisions(groundAnchor, undefined,
+        this.flight.active ? position.y + 25 : undefined);
       if (
   (this.grounded || this.scooter.mounted) &&
   previousChanges !== this.photoreal.collisionChanges
@@ -1262,6 +1356,17 @@ export class CampusGame {
           this.accumulator / (1 / 60),
         );
     this.avatar.position.set(p.x, p.y - 0.905, p.z);
+    if (this.flight.active) {
+      const horizontalSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+      const lean = this.active && !this.mapExpanded && !this.overview && this.flight.mode !== 'landing'
+        ? THREE.MathUtils.smoothstep(horizontalSpeed, 1, 14) * 1.28 : 0;
+      this.flightLean = THREE.MathUtils.lerp(this.flightLean, lean, 1 - Math.exp(-elapsed * 6));
+      this.avatar.rotation.x = this.flightLean;
+      // Tilt around the hips, keeping the flying body's center near its capsule.
+      const pivot = new THREE.Vector3(0, .85, 0).sub(new THREE.Vector3(0, .85, 0).applyEuler(this.avatar.rotation));
+      this.avatar.position.add(pivot);
+      this.flightPose?.apply(this.avatar, this.flightLean / 1.28);
+    }
     this.updateScooterVisual(p);
     this.focus.lerp(
       new THREE.Vector3(p.x, p.y + 0.6, p.z),
@@ -1269,8 +1374,9 @@ export class CampusGame {
     );
     const overviewCamera = this.overview || (!this.active && !!this.photoreal);
     this.rideCameraBlend += ((this.scooter.mounted?1:0)-this.rideCameraBlend)*(1-Math.exp(-elapsed*4));
-    const requestedDistance = this.distance + .9*this.rideCameraBlend;
-    const fov = 55 + 3*this.rideCameraBlend*Math.min(1,this.scooter.actualSpeed/this.scooter.maxSpeed);
+    const flightRatio = this.flight.active ? Math.min(1, this.velocity.length() / FLIGHT_TUNING.boostSpeed) : 0;
+    const requestedDistance = this.distance + .9*this.rideCameraBlend + 1.8*flightRatio;
+    const fov = 55 + 3*this.rideCameraBlend*Math.min(1,this.scooter.actualSpeed/this.scooter.maxSpeed) + 10*flightRatio;
     if(Math.abs(this.camera.fov-fov)>.005) {this.camera.fov=fov;this.camera.updateProjectionMatrix();}
     const viewPitch = overviewCamera ? 0.95 : this.pitch;
     const offset = new THREE.Vector3(
@@ -1336,8 +1442,11 @@ export class CampusGame {
         location,
         speed: Math.hypot(this.velocity.x, this.velocity.z),
         fps,
-        mode: this.scooter.mounted ? 'Scooter' : this.grounded ? this.action : 'Jump',
-        locomotion: this.scooter.mode, scooterSpeed: this.scooter.actualSpeed,
+        mode: this.flight.active ? this.flight.mode === 'landing' ? 'Landing' : 'Flight' : this.scooter.mounted ? 'Scooter' : this.grounded ? this.action : 'Jump',
+        locomotion: this.flight.active ? this.flight.mode : this.scooter.mode, scooterSpeed: this.scooter.actualSpeed,
+        flightSpeed: this.flight.active ? this.velocity.length() : 0,
+        flightHeight: Math.max(0, p.y - .905 - this.world.terrain.height(p.x, p.z)),
+        flightMessage: now < this.flightMessageUntil ? this.flightMessage : undefined,
         rideMessage: now<this.scooterMessageUntil ? this.scooterMessage : undefined,
         offline: this.offline,
         imagery: this.imagerySnapshot(),
@@ -1508,6 +1617,9 @@ export class CampusGame {
       travel: { pending: !!this.travel, count: this.travelCount, last: this.lastTravel,
         candidate: this.travel?.candidates[this.travel.index], message: this.travelMessage },
       scooter: {...this.scooter.snapshot(),support:this.scooterSupport,collisionReady:this.scooterCollisionReady,groundQuery:{...this.scooterGround.stats},queryMs:this.scooterQueryMs.length ? {mean:this.scooterQueryMs.reduce((a,b)=>a+b,0)/this.scooterQueryMs.length,max:Math.max(...this.scooterQueryMs)} : null,model:this.scooterVisual?.stats,pose:this.scooterPose?.diagnostics({includeBounds:includeCharacterBounds})},
+      flight: { mode: this.flight.mode, velocity: this.flight.velocity.toArray(), speed: this.flight.active ? this.velocity.length() : 0,
+        heightAboveTerrain: p ? Math.max(0, p.y - .905 - this.world.terrain.height(p.x, p.z)) : 0,
+        lean: this.flightLean, blocked: this.flight.blocked, tuning: FLIGHT_TUNING },
       movement: { walkSpeed: WALK_SPEED, runSpeed: RUN_SPEED, speed: Math.hypot(this.velocity.x, this.velocity.z) },
       viewport: {
         width: this.host.clientWidth,
@@ -1540,6 +1652,7 @@ export class CampusGame {
     this.localReflection?.dispose();
     this.scooterGround.clear();
     this.scooterPose?.dispose();
+    this.flightPose?.restore();
     this.scooterVisual?.dispose();
     if (document.pointerLockElement === this.renderer.domElement)
       document.exitPointerLock();

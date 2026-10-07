@@ -69,6 +69,7 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
     });
   }, []);
   const streamedImagery = status.imagery?.provider.includes('Google') ?? false;
+  const flying = status.locomotion === 'flying' || status.locomotion === 'landing';
   return (
     <main className="game-shell">
       <div className="game-viewport" ref={host} />
@@ -92,6 +93,12 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
             Restore photographic scenery
           </button>
         )}
+        {playing && <button className="flight-toggle" type="button"
+          disabled={!status.ready || status.traveling || status.mapExpanded || status.overview}
+          aria-pressed={flying}
+          onClick={() => game.current?.toggleFlight()}>
+          <kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : flying ? 'Land' : 'Take off'}
+        </button>}
       </header>
       <div className="compass" aria-label="Compass">
         {status.heading ?? '—'}
@@ -99,11 +106,11 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
       {!playing && (
         <div className="entry">
           <p className="eyebrow">THE UNIVERSITY OF TEXAS</p>
-          <h2>Take a walk.</h2>
+          <h2>Explore the Forty Acres.</h2>
           <p>
             {status.offline
-              ? 'Explore the local campus on foot or by scooter.'
-              : 'Explore campus on foot or by scooter.'}
+              ? 'Walk, ride a scooter, or press G to fly over the local campus.'
+              : 'Walk, ride a scooter, or press G to fly over campus.'}
           </p>
           <a href={status.offline ? '/' : '/?offline=1'} style={{color:'inherit',fontSize:14}}>
             {status.offline ? 'Use photographic campus' : 'Use local-only campus'}
@@ -167,18 +174,27 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
         </div>
         {status.mapExpanded && <p className="map-help">Click anywhere to start nearby · Arrow keys + Enter also work · Esc to close</p>}
       </aside>
-      <footer className={`controls${status.locomotion && status.locomotion !== 'foot' ? ' riding-controls' : ''}`}>
-        {status.locomotion && status.locomotion !== 'foot' ? <>
+      <footer className={`controls${flying ? ' flying-controls' : status.locomotion && status.locomotion !== 'foot' ? ' riding-controls' : ''}`}>
+        {flying ? <>
+          <span><kbd>W A S D</kbd> Fly</span>
+          <span><kbd>SPACE</kbd> Up</span>
+          <span><kbd>CTRL / C</kbd> Down</span>
+          <span><kbd>SHIFT</kbd> Boost</span>
+          <span><kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : 'Land'}</span>
+          <span className="flight-readout">{status.locomotion === 'landing' ? 'Landing' : 'Flight'} · {Math.round((status.flightSpeed ?? 0) * 2.23694)} mph · {Math.round(status.flightHeight ?? 0)} m up</span>
+        </> : status.locomotion && status.locomotion !== 'foot' ? <>
           <span><kbd>W</kbd> Ride</span>
           <span><kbd>A / D</kbd> Steer</span>
           <span><kbd>S / SPACE</kbd> Brake</span>
           <span><kbd>F</kbd> Get off</span>
           <span>Scooter · {Math.round((status.scooterSpeed ?? 0)*2.23694)} mph</span>
+          <span><kbd>G</kbd> Take off</span>
         </> : <>
           <span><kbd>W A S D</kbd> Walk</span>
           <span><kbd>SHIFT</kbd> Run</span>
           <span><kbd>SPACE</kbd> Jump</span>
           <span><kbd>F</kbd> Scooter</span>
+          <span><kbd>G</kbd> Take off</span>
         </>}
         <span>
           <kbd>MOUSE DRAG</kbd> Look
@@ -191,7 +207,8 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
           Scroll to zoom · Double-click to lock camera · Esc to release
         </span>
       </footer>
-      {status.rideMessage && !status.travelMessage && <output className="travel-notice" aria-live="polite">{status.rideMessage}</output>}
+      {status.flightMessage && !status.travelMessage && <output className="travel-notice" aria-live="polite">{status.flightMessage}</output>}
+      {status.rideMessage && !status.travelMessage && !status.flightMessage && <output className="travel-notice" aria-live="polite">{status.rideMessage}</output>}
       {status.travelMessage && <output className="travel-notice" aria-live="polite">
         <span>{status.travelMessage}</span>
         {status.traveling && <Button variant="ghost" size="sm" onClick={() => game.current?.cancelTravel()}>Cancel</Button>}

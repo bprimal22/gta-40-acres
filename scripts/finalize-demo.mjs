@@ -38,6 +38,10 @@ const worker = (await readFile(resolve(root, 'public/sw.js'), 'utf8'))
   .replace(/const CACHE_NAME = '[^']+';/, `const CACHE_NAME = 'ut-campus-demo-${version}';`);
 await writeFile(resolve(out, 'sw.js'), worker);
 await writeFile(resolve(out, '_headers'), responseHeaders);
-const report = { version, createdAt: new Date().toISOString(), files: paths.length + 2, bytes: (await Promise.all(paths.map(p => stat(p)))).reduce((n, s) => n + s.size, 0), host: 'Cloudflare Pages Free', visitorOwnedCesiumTokens: true, guestPreviewHours: 24, guestPreviewRequiresRuntimeSecrets: true };
+const assetPaths = (await files(out)).filter(p => relative(out, p) !== 'release.json');
+const assetBytes = (await Promise.all(assetPaths.map(p => stat(p)))).reduce((n, s) => n + s.size, 0);
+const report = { version, createdAt: new Date().toISOString(), files: assetPaths.length + 1, bytes: assetBytes, host: 'Cloudflare Pages Free', visitorOwnedCesiumTokens: true, guestPreviewHours: 24, guestPreviewRequiresRuntimeSecrets: true };
+// Include this small report itself, including when finalizing an existing build.
+for (let i = 0; i < 3; i++) report.bytes = assetBytes + Buffer.byteLength(JSON.stringify(report, null, 2) + '\n');
 await writeFile(resolve(out, 'release.json'), JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report));

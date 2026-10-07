@@ -40,14 +40,24 @@ geometry and makes no Cesium tile requests.
 
 ## Controls
 
-- **WASD** or arrow keys: move
-- **Shift**: run
-- **Space**: jump or brake the scooter
+- **WASD**: move or fly relative to the camera
+- **Shift**: run or boost flight
+- **Space**: jump, brake the scooter, or climb while flying
+- **G**: take off or start automatic landing; press again to cancel landing
+- **Control / C**: descend while flying
 - **F**: mount or dismount the scooter
 - **V**: switch between character and campus overview
 - **M**: open the travel map and click a destination
 - Mouse drag: orbit the camera
 - Scroll: zoom
+
+Flight starts with a short rise and hovers when controls are released. Cruise
+speed is 18 m/s (40 mph); Shift boosts to 38 m/s (85 mph). Landing restores
+walking and jumping. Map and overview pause flight; map travel arrives on foot.
+The accepted rig receives a temporary Superman-style pose while moving.
+Rapier still checks the character capsule against campus geometry, with a
+terrain-relative height limit of approximately 240 m. Near the ground,
+movement can briefly wait for streamed collision geometry to load.
 
 ## Build and check
 
@@ -65,6 +75,8 @@ token in browser code or commit it to Git.
 
 - `lib/campus/game.ts` owns the render loop, controls, camera, character, and
   fixed-step Rapier simulation.
+- `lib/campus/flight-motion.ts` computes flight velocity and landing state;
+  `flight-pose.ts` adds a temporary pose over the existing character animations.
 - `lib/campus/photoreal.ts` streams photographic tiles and applies foreground
   repairs.
 - `lib/campus/walkway.ts` assembles authored roads, landmarks, buildings, and
