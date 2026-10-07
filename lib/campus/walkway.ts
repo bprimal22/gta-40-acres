@@ -1,5 +1,6 @@
 import {applyMainBuildingMaterials} from './main-building-materials';
 import { buildCapitolDome } from './capitol-dome';
+import { buildCapitolArea } from './capitol-area';
 import {applyHistoricGlazing} from './historic-glazing';
 import {applyHistoricMasonry} from './historic-masonry';
 import {engineeringSouthwestSeamTrim} from './engineering-southwest-seam';
@@ -181,6 +182,7 @@ export class SpeedwayWalkway {
   hogg: ReturnType<typeof buildHoggBuilding>['stats'] | null = null;
   union: ReturnType<typeof buildUnionBuilding>['stats'] | null = null;
   capitolDome: ReturnType<typeof buildCapitolDome>['stats'] | null = null;
+  capitolArea: ReturnType<typeof buildCapitolArea>['stats'] | null = null;
   private auxiliaryGeometries: THREE.BufferGeometry[] = [];
   private seamGeometry?: THREE.BufferGeometry;
   private seamMesh?: THREE.Mesh;
@@ -1626,6 +1628,11 @@ export class SpeedwayWalkway {
       for (const geometry of capitol.colliderGeometries) addCollider(geometry);
       this.materials.push(...capitol.materials); this.volumes.push(...capitol.volumes);
       this.capitolDome = capitol.stats;
+      const area = buildCapitolArea(capitol.materials);
+      this.surfaces.add(...area.meshes);
+      for (const geometry of area.colliderGeometries) addCollider(geometry);
+      this.materials.push(...area.materials); this.volumes.push(...area.volumes);
+      this.treePlacements.push(...area.trees); this.capitolArea = area.stats;
     }
     this.surfaces.traverse(object => {
       if (object instanceof THREE.Mesh && colliderByGeometry.has(object.geometry))
@@ -1644,6 +1651,7 @@ export class SpeedwayWalkway {
     return {
       mlk:this.mlk,
       capitolDome:this.capitolDome,
+      capitolArea:this.capitolArea,
       mallBuildings:this.mallBuildings,
       historicCentral:this.historicCentral,
       garrisonLandscape:this.garrisonLandscape,

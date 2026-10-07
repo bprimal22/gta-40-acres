@@ -54,7 +54,11 @@ https://polyhaven.com/a/gravel_embedded_concrete
 Local color maps are reduced to 1024px in linear light; OpenGL normal maps to 512px with vector renormalization. Color and shallow surface relief are adjusted to the user's reference photographs; these are generic material scans, not UT pavement scans. Source and derived hashes: /assets/sources.json.
 Mall lawn finish: borrows the existing Withered Grass photograph (Poly Haven, CC0), with muted dry/live color variation and approximate millimetre shading relief. Ground geometry and photographic cleanup regions remain development approximations.
 
-Texas State Capitol upper dome: independently authored geometry guided by the State Preservation Board north-facade photograph and official Capitol exterior photographs. Colonnades, arched windows, galleries, curved painted-metal shell and lantern are approximate; the tiny Goddess of Liberty silhouette is not an exact replica. Reference photographs are research only, not bundled surface textures. The photographic lower building and grounds remain streamed scenery.
+Texas State Capitol upper dome: independently authored geometry guided by the State Preservation Board north-facade photograph and official Capitol exterior photographs. Colonnades, arched windows, galleries, curved painted-metal shell and lantern are approximate; the tiny Goddess of Liberty silhouette is not an exact replica. Reference photographs are research only, not bundled surface textures. The upper dome is joined by an independently authored exterior and bounded grounds replacement. Window counts, trim, bronze monument silhouettes and ground elevations remain approximations. The north extension and surrounding city retain streamed scenery.
 https://tspb.texas.gov/prop/tcg/tcg-photos/index.html
 https://capitol.texas.gov/Resources/Images.aspx
 https://www.tspb.texas.gov/prop/tc/tc-architecture/index.html
+
+Texas State Capitol exterior and grounds: City of Austin 2023 building footprint 533822 supplies alignment and approximate massing; State Preservation Board north/south photographs, site map and monument guide supply architectural and landscape references. Reference photographs and PDFs are not bundled textures. Independently authored stone, paving and lawn shaders; reused bundled foreground tree asset (credited above).
+https://tspb.texas.gov/plan/maps/maps.html
+https://tspb.texas.gov/prop/tcg/tcg-monuments/index.html

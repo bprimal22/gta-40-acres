@@ -5,6 +5,7 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Terrain } from './terrain';
+import { capitolGroundReference } from './capitol-area';
 import { CampusWorld } from './world';
 import { materials } from './materials';
 import { FrameProfiler } from './profiler';
@@ -217,6 +218,11 @@ export class CampusGame {
     if (this.disposed) return;
     data.landmarks.CAP = { name: 'Texas State Capitol · North grounds',
       position: [-278.335, 1179.898] };
+    // The original campus bound sliced through the Capitol's south wing.
+    // The authored grounds provide visible, collidable support to Congress Ave.
+    data.bounds[3] = Math.max(data.bounds[3], 1536);
+    data.landmarks.CAPS = { name: 'Texas State Capitol · Great Walk',
+      position: [-363.0, 1433.0] };
     const capitol = data.buildings.find(building => building.id === 533822);
     if (capitol) { capitol.name = 'Texas State Capitol'; capitol.abbr = 'CAP'; }
     markBoot('world');
@@ -224,7 +230,8 @@ export class CampusGame {
     this.physics.timestep = 1 / 60;
     this.world = new CampusWorld(
       data,
-      new Terrain(terrain),
+      new Terrain(terrain, this.offline || (query.get('walkway') ?? 'landscape') === 'landscape'
+        ? capitolGroundReference : undefined),
       this.physics,
       () => materials(this.renderer),
       this.renderer,
@@ -419,6 +426,10 @@ export class CampusGame {
       this.camera.lookAt(x, y, z);
     }
     if(this.walkway){
+      for(const material of this.walkway.materials)
+        if(material.name === 'Capitol exterior glazing' && material instanceof THREE.MeshStandardMaterial) {
+          material.envMap=this.skyEnvironment.texture;material.envMapIntensity=.25;material.needsUpdate=true;
+        }
       // These named facades borrow the existing sky PMREM; each keeps its
       // local reflection strength without changing the scene's lighting.
       for(const material of this.walkway.materials)
