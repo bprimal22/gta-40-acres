@@ -97,7 +97,7 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
           disabled={!status.ready || status.traveling || status.mapExpanded || status.overview}
           aria-pressed={flying}
           onClick={() => game.current?.toggleFlight()}>
-          <kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : flying ? 'Land' : 'Take off'}
+          <kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : flying ? 'Land' : 'Take off · 50 m'}
         </button>}
       </header>
       <div className="compass" aria-label="Compass">

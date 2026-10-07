@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import type { TerrainData } from './types';
 export class Terrain {
-  constructor(public data: TerrainData) {}
+  constructor(public data: TerrainData,
+    private readonly authoredHeight?: (x:number,z:number)=>number|null) {}
   height(x: number, z: number) {
+    const authored=this.authoredHeight?.(x,z);
+    if(authored!==undefined&&authored!==null&&Number.isFinite(authored))return authored;
     const d = this.data,
       fx = THREE.MathUtils.clamp((x - d.x0) / d.step, 0, d.nx - 1.001),
       fz = THREE.MathUtils.clamp((z - d.z0) / d.step, 0, d.nz - 1.001);

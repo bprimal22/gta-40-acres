@@ -1,4 +1,6 @@
 import {applyMainBuildingMaterials} from './main-building-materials';
+import { buildCapitolDome } from './capitol-dome';
+import { buildCapitolArea } from './capitol-area';
 import {applyHistoricGlazing} from './historic-glazing';
 import {applyHistoricMasonry} from './historic-masonry';
 import {engineeringSouthwestSeamTrim} from './engineering-southwest-seam';
@@ -179,6 +181,8 @@ export class SpeedwayWalkway {
   flawn: ReturnType<typeof buildFlawnBuilding>['stats'] | null = null;
   hogg: ReturnType<typeof buildHoggBuilding>['stats'] | null = null;
   union: ReturnType<typeof buildUnionBuilding>['stats'] | null = null;
+  capitolDome: ReturnType<typeof buildCapitolDome>['stats'] | null = null;
+  capitolArea: ReturnType<typeof buildCapitolArea>['stats'] | null = null;
   private auxiliaryGeometries: THREE.BufferGeometry[] = [];
   private seamGeometry?: THREE.BufferGeometry;
   private seamMesh?: THREE.Mesh;
@@ -1618,6 +1622,18 @@ export class SpeedwayWalkway {
 
       }
     }
+    if (landscape) {
+      const capitol = buildCapitolDome();
+      this.surfaces.add(...capitol.meshes);
+      for (const geometry of capitol.colliderGeometries) addCollider(geometry);
+      this.materials.push(...capitol.materials); this.volumes.push(...capitol.volumes);
+      this.capitolDome = capitol.stats;
+      const area = buildCapitolArea(capitol.materials);
+      this.surfaces.add(...area.meshes);
+      for (const geometry of area.colliderGeometries) addCollider(geometry);
+      this.materials.push(...area.materials); this.volumes.push(...area.volumes);
+      this.treePlacements.push(...area.trees); this.capitolArea = area.stats;
+    }
     this.surfaces.traverse(object => {
       if (object instanceof THREE.Mesh && colliderByGeometry.has(object.geometry))
         this.groundMaskGeometries.add(object.geometry);
@@ -1634,6 +1650,8 @@ export class SpeedwayWalkway {
   snapshot() {
     return {
       mlk:this.mlk,
+      capitolDome:this.capitolDome,
+      capitolArea:this.capitolArea,
       mallBuildings:this.mallBuildings,
       historicCentral:this.historicCentral,
       garrisonLandscape:this.garrisonLandscape,
