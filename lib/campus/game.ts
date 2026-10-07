@@ -78,6 +78,8 @@ export class CampusGame {
   private flightLean = 0;
   private flightMessage = '';
   private flightMessageUntil = 0;
+  private flightGroundTarget: number | null = null;
+  private flightGroundLift = 0;
   private scooterGround = new LocalGroundQuery();
   private riderStationary = 1;
   readonly scooter = new ScooterMotion(RUN_SPEED);
@@ -927,6 +929,7 @@ export class CampusGame {
   }
   private leaveFlight() {
     this.flightPose?.restore(); this.flight.stop(); this.flightLean = 0;
+    this.flightGroundTarget = null; this.flightGroundLift = 0;
     this.avatar.rotation.x = 0; this.avatar.rotation.z = 0;
     this.controller.enableSnapToGround(.38); this.controller.enableAutostep(.32, .2, false);
     this.vertical = 0; this.velocity.set(0, 0, 0); this.jumpQueued = false;
@@ -945,7 +948,32 @@ export class CampusGame {
     const [west, north, east, south] = this.world.data.bounds;
     delta.x = THREE.MathUtils.clamp(p.x + delta.x, west + 2, east - 2) - p.x;
     delta.z = THREE.MathUtils.clamp(p.z + delta.z, north + 2, south - 2) - p.z;
-    delta.y = Math.min(delta.y, Math.max(0, terrainY + FLIGHT_TUNING.maxHeightAboveTerrain - p.y));
+    this.flightGroundTarget = null; this.flightGroundLift = 0;
+    const horizontalSpeed = Math.hypot(requested.x, requested.z);
+    if (enabled && this.flight.mode === 'flying' && climb === 0 && horizontalSpeed > .25) {
+      // Look along the route rather than holding a fixed world Y until a stair
+      // riser catches the capsule. Short downward physics probes see the same
+      // loaded ground as movement; steep wall faces never qualify as floors.
+      const ahead = THREE.MathUtils.clamp(horizontalSpeed * .4, 1.5, 10);
+      let floorY = -Infinity;
+      for (const distance of [0, ahead * .5, ahead]) {
+        const x = p.x + requested.x / horizontalSpeed * distance;
+        const z = p.z + requested.z / horizontalSpeed * distance;
+        const fromY = p.y + 2;
+        const hit = this.physics.castRayAndGetNormal(
+          new RAPIER.Ray({ x, y: fromY, z }, { x: 0, y: -1, z: 0 }),
+          18, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, this.collider, this.body,
+        );
+        if (hit && hit.normal.y > .65) floorY = Math.max(floorY, fromY - hit.timeOfImpact);
+      }
+      if (Number.isFinite(floorY)) {
+        this.flightGroundTarget = floorY + .905 + FLIGHT_TUNING.groundClearance;
+        this.flightGroundLift = THREE.MathUtils.clamp((this.flightGroundTarget - p.y) * 4, 0, FLIGHT_TUNING.climbSpeed);
+        delta.y = Math.max(delta.y, this.flightGroundLift * dt);
+      }
+    }
+    // The HUD measures feet above terrain, so apply the cap to that same datum.
+    delta.y = Math.min(delta.y, Math.max(0, terrainY + .905 + FLIGHT_TUNING.maxHeightAboveTerrain - p.y));
     // Await nearby ground/roof collision data before descending into a new
     // district. Upward escape remains available while streamed scenery loads.
     if (this.photoreal && !this.scooterCollisionReady && p.y < terrainY + 12) {
@@ -1270,7 +1298,7 @@ export class CampusGame {
       }
       const previousChanges = this.photoreal.collisionChanges;
       this.scooterCollisionReady = this.photoreal.syncCollisions(groundAnchor, undefined,
-        this.flight.active ? position.y + 25 : undefined);
+        this.flight.active ? position.y + 25 : undefined, this.flight.active);
       if (
   (this.grounded || this.scooter.mounted) &&
   previousChanges !== this.photoreal.collisionChanges
@@ -1619,7 +1647,8 @@ export class CampusGame {
       scooter: {...this.scooter.snapshot(),support:this.scooterSupport,collisionReady:this.scooterCollisionReady,groundQuery:{...this.scooterGround.stats},queryMs:this.scooterQueryMs.length ? {mean:this.scooterQueryMs.reduce((a,b)=>a+b,0)/this.scooterQueryMs.length,max:Math.max(...this.scooterQueryMs)} : null,model:this.scooterVisual?.stats,pose:this.scooterPose?.diagnostics({includeBounds:includeCharacterBounds})},
       flight: { mode: this.flight.mode, velocity: this.flight.velocity.toArray(), speed: this.flight.active ? this.velocity.length() : 0,
         heightAboveTerrain: p ? Math.max(0, p.y - .905 - this.world.terrain.height(p.x, p.z)) : 0,
-        lean: this.flightLean, blocked: this.flight.blocked, tuning: FLIGHT_TUNING },
+        lean: this.flightLean, blocked: this.flight.blocked, groundTarget: this.flightGroundTarget,
+        groundLift: this.flightGroundLift, tuning: FLIGHT_TUNING },
       movement: { walkSpeed: WALK_SPEED, runSpeed: RUN_SPEED, speed: Math.hypot(this.velocity.x, this.velocity.z) },
       viewport: {
         width: this.host.clientWidth,

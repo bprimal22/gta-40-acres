@@ -41,7 +41,7 @@ geometry and makes no Cesium tile requests.
 ## Controls
 
 - **WASD**: move or fly relative to the camera
-- **Shift**: run or boost flight
+- **Shift**: run; while flying, boost and climb with WASD
 - **Space**: jump, brake the scooter, or climb while flying
 - **G**: take off or start automatic landing; press again to cancel landing
 - **Control / C**: descend while flying
@@ -54,9 +54,12 @@ geometry and makes no Cesium tile requests.
 Flight starts with a short rise and hovers when controls are released. Cruise
 speed is 18 m/s (40 mph); Shift boosts to 38 m/s (85 mph). Landing restores
 walking and jumping. Map and overview pause flight; map travel arrives on foot.
-The accepted rig receives a temporary Superman-style pose while moving.
+Ordinary low flight rises over uphill ground and stairs to maintain about 3 m
+of clearance. Shift plus any WASD direction soars upward; Control/C overrides
+that climb for a controlled descent. Releasing directions hovers without
+continuing the climb. The accepted rig receives a temporary Superman-style pose while moving.
 Rapier still checks the character capsule against campus geometry, with a
-terrain-relative height limit of approximately 240 m. Near the ground,
+terrain-relative height limit of 240 m, measured from the character's feet. Near the ground,
 movement can briefly wait for streamed collision geometry to load.
 
 ## Build and check

@@ -179,7 +179,7 @@ function CampusView({ tilesConfig }: { tilesConfig?: TilesConfig }) {
           <span><kbd>W A S D</kbd> Fly</span>
           <span><kbd>SPACE</kbd> Up</span>
           <span><kbd>CTRL / C</kbd> Down</span>
-          <span><kbd>SHIFT</kbd> Boost</span>
+          <span><kbd>SHIFT</kbd> Soar / boost</span>
           <span><kbd>G</kbd> {status.locomotion === 'landing' ? 'Resume flight' : 'Land'}</span>
           <span className="flight-readout">{status.locomotion === 'landing' ? 'Landing' : 'Flight'} · {Math.round((status.flightSpeed ?? 0) * 2.23694)} mph · {Math.round(status.flightHeight ?? 0)} m up</span>
         </> : status.locomotion && status.locomotion !== 'foot' ? <>
