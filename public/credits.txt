@@ -53,3 +53,8 @@ https://polyhaven.com/a/clean_pebbles
 https://polyhaven.com/a/gravel_embedded_concrete
 Local color maps are reduced to 1024px in linear light; OpenGL normal maps to 512px with vector renormalization. Color and shallow surface relief are adjusted to the user's reference photographs; these are generic material scans, not UT pavement scans. Source and derived hashes: /assets/sources.json.
 Mall lawn finish: borrows the existing Withered Grass photograph (Poly Haven, CC0), with muted dry/live color variation and approximate millimetre shading relief. Ground geometry and photographic cleanup regions remain development approximations.
+
+Texas State Capitol upper dome: independently authored geometry guided by the State Preservation Board north-facade photograph and official Capitol exterior photographs. Colonnades, arched windows, galleries, curved painted-metal shell and lantern are approximate; the tiny Goddess of Liberty silhouette is not an exact replica. Reference photographs are research only, not bundled surface textures. The photographic lower building and grounds remain streamed scenery.
+https://tspb.texas.gov/prop/tcg/tcg-photos/index.html
+https://capitol.texas.gov/Resources/Images.aspx
+https://www.tspb.texas.gov/prop/tc/tc-architecture/index.html

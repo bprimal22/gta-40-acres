@@ -12,6 +12,8 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import type { CutVolume } from './clip-volume';
 import { MeshRepairQueue } from './mesh-repair-queue';
 import { resetRateLimitedTiles, TileDownloadRecovery } from './tile-download-recovery';
+import { CAPITOL_DETAIL_CENTER, CAPITOL_DETAIL_RADIUS, CAPITOL_DETAIL_ERROR,
+  capitolDetailNeeded } from './capitol-detail';
 
 export interface TilesConfig {
   token: string;
@@ -58,6 +60,8 @@ export class PhotorealCampus {
   private calibrationRegion = new SphereRegion({sphere:new THREE.Sphere(new THREE.Vector3(),45),errorTarget:.7});
   private regions = new LoadRegionPlugin();
   private travelRegion?: SphereRegion;
+  private capitolRegion?: SphereRegion;
+  private travelFocus: THREE.Vector3 | null = null;
   entries = new Map<Tile, Entry>();
   ray = new THREE.Raycaster();
   aligned = false;
@@ -216,10 +220,31 @@ export class PhotorealCampus {
     this.region.sphere.center
       .copy(position)
       .applyMatrix4(this.tiles.group.matrixWorldInverse);
+    this.updateCapitolDetail(this.travelFocus ?? position);
     if(!this.aligned)this.calibrationRegion.sphere.center.copy(this.calibrationAnchor).applyMatrix4(this.tiles.group.matrixWorldInverse);
     this.tiles.setResolutionFromRenderer(this.camera, this.renderer);
     this.tiles.update();
     this.tiles.group.updateMatrixWorld(true);
+  }
+
+  private updateCapitolDetail(position: THREE.Vector3) {
+    const needed = capitolDetailNeeded(position, !!this.capitolRegion);
+    if (needed && !this.capitolRegion) {
+      this.capitolRegion = new SphereRegion({
+        sphere: new THREE.Sphere(new THREE.Vector3(), CAPITOL_DETAIL_RADIUS),
+        errorTarget: CAPITOL_DETAIL_ERROR,
+      });
+      this.regions.addRegion(this.capitolRegion);
+    } else if (!needed && this.capitolRegion) {
+      this.regions.removeRegion(this.capitolRegion);
+      this.capitolRegion = undefined;
+    }
+    // The focus needs the current registration transform, including vertical
+    // alignment. Its height covers both the pedestrian frontage and lantern.
+    this.capitolRegion?.sphere.center.copy(CAPITOL_DETAIL_CENTER)
+      .applyMatrix4(this.tiles.group.matrixWorldInverse);
+    // Keep the normal screen-error budget for the rest of the visible city.
+    // Only this landmark's region requests additional geometric detail.
   }
 
   surface(
@@ -306,6 +331,7 @@ export class PhotorealCampus {
   }
 
   setTravelDestination(position: THREE.Vector3 | null) {
+    this.travelFocus = position?.clone() ?? null;
     if (!position) {
       if (this.travelRegion) this.regions.removeRegion(this.travelRegion);
       this.travelRegion = undefined;
@@ -316,6 +342,7 @@ export class PhotorealCampus {
       this.regions.addRegion(this.travelRegion);
     }
     this.travelRegion.sphere.center.copy(position).applyMatrix4(this.tiles.group.matrixWorldInverse);
+    this.updateCapitolDetail(position);
   }
 
   syncCollisions(position: THREE.Vector3, preservePosition?: THREE.Vector3, ceilingY = position.y + 25, airborne = false) {
@@ -562,6 +589,8 @@ export class PhotorealCampus {
     };
     return {
       provider: 'Google Photorealistic 3D Tiles via Cesium ion',
+      capitolDetail: { active: !!this.capitolRegion, radiusMeters: CAPITOL_DETAIL_RADIUS,
+        geometricErrorTarget: CAPITOL_DETAIL_ERROR, screenErrorTarget: this.tiles.errorTarget },
       loaded: this.loaded,
       visible: this.tiles.visibleTiles.size,
       active: this.tiles.activeTiles.size,

@@ -26,7 +26,7 @@ export const SCOOTER_ENVELOPE = Object.freeze({
   riderCenterToFeet: .905, riderHalfSegment: .54, riderRadius: .34,
   frontWheelZ: .58, rearWheelZ: -.45,
   minZ: -.62, maxZ: .79, halfWidth: .49, minY: .14, maxY: 1.20, riderGuardMinY: .30, riderGuardMaxY: 1.76,
-  maxStep: .12, maxSlope: Math.PI / 12, maxTranslation: .1,
+  maxSurfaceNoise: .08, minGroundNormalY: .5, maxStep: .12, maxSlope: Math.PI / 12, maxTranslation: .1,
   maxRotation: Math.PI / 60, dismountDistance: .7,
 });
 const E = SCOOTER_ENVELOPE, EPS = .00001, SKIN = .004, PROBE_UP = .35, PROBE_DOWN = .35;
@@ -64,8 +64,11 @@ export class ScooterClearance {
     const hit=world.castRayAndGetNormal(new RAPIER.Ray({x,y:fromY,z},{x:0,y:-1,z:0}),distance,true,this.flags,undefined,collider);
     if(!hit)return{hit:null,reason:'unsupported'};
     const point={x,y:fromY-hit.timeOfImpact,z},normal={...hit.normal};
-    if(!finite(normal)||normal.y<Math.cos(E.maxSlope)-EPS)return{hit:null,reason:'slope'};
-    if(renderedGround){const shown=renderedGround(x,z,fromY,distance);if(!shown||!finite(shown.point)||!finite(shown.normal)||Math.abs(shown.point.y-point.y)>.04||shown.normal.y<Math.cos(E.maxSlope)-EPS)return{hit:null,reason:'surface-mismatch'};}
+    // A photogrammetry triangle can be much steeper than the road under the
+    // wheelbase. Only reject wall-like faces here; measured axle and crossfall
+    // grades below still enforce the 15-degree road limit.
+    if(!finite(normal)||normal.y<=E.minGroundNormalY)return{hit:null,reason:'slope'};
+    if(renderedGround){const shown=renderedGround(x,z,fromY,distance);if(!shown||!finite(shown.point)||!finite(shown.normal)||Math.abs(shown.point.y-point.y)>E.maxSurfaceNoise||shown.normal.y<=E.minGroundNormalY)return{hit:null,reason:'surface-mismatch'};}
     return{hit:{point,normal},reason:null};
   }
 
@@ -114,7 +117,10 @@ export class ScooterClearance {
     const exactY=probe.y-exact.time_of_impact;
     if(exactY-riderCenterY>E.maxStep+EPS)return{sample:null,reason:'rider-clearance'};
     riderCenterY=Math.max(riderCenterY,exactY);
-    const normal=mul(add(front.normal,rear.normal),.5),n=length(normal),support={groundY,front,rear,normal:mul(normal,1/n),pitch,roll,rotation:orientation(heading,pitch,roll)};
+    // Derive road orientation from measured support heights rather than the
+    // two arbitrary scan triangles under the tire contact points.
+    const normal=rotate(orientation(heading,pitch,roll),{x:0,y:1,z:0}),n=length(normal),support={groundY,front,rear,normal:mul(normal,1/n),pitch,roll,rotation:orientation(heading,pitch,roll)};
+    if(support.normal.y<Math.cos(E.maxSlope)-EPS)return{sample:null,reason:'slope'};
     return{sample:{center:{x:center.x,y:riderCenterY,z:center.z},heading,support},reason:null};
   }
 
@@ -187,7 +193,10 @@ export class ScooterClearance {
   resolveMove(input: {fromHeading: number;heading: number;displacement: {x: number;z: number}}): ScooterClearanceResult {
     const from={center:{...this.options.collider.translation()},heading:input.fromHeading},planned=this.traceMove(from,input.displacement,input.heading);if(!planned.support)return planned;
     const c=this.options.controller,old={step:c.autostepEnabled(),height:c.autostepMaxHeight(),width:c.autostepMinWidth(),dynamic:c.autostepIncludesDynamicBodies(),snap:c.snapToGroundDistance(),climb:c.maxSlopeClimbAngle(),slideAngle:c.minSlopeSlideAngle(),slide:c.slideEnabled()};let movement: V;
-    try{c.enableAutostep(E.maxStep,.2,false);c.disableSnapToGround();c.setMaxSlopeClimbAngle(E.maxSlope);c.setMinSlopeSlideAngle(E.maxSlope);c.setSlideEnabled(true);c.computeColliderMovement(this.options.collider,planned.delta,this.flags,undefined,other=>other.handle!==this.options.collider.handle);movement={...c.computedMovement()};}
+    // Triangle eligibility is deliberately wider than the measured road grade.
+    // Keep the KCC consistent so a permitted centimetric facet cannot undo
+    // the wheelbase validation. All walking settings are restored below.
+    try{c.enableAutostep(E.maxStep,.2,false);c.disableSnapToGround();c.setMaxSlopeClimbAngle(Math.acos(E.minGroundNormalY));c.setMinSlopeSlideAngle(E.maxSlope);c.setSlideEnabled(true);c.computeColliderMovement(this.options.collider,planned.delta,this.flags,undefined,other=>other.handle!==this.options.collider.handle);movement={...c.computedMovement()};}
     finally{if(old.step)c.enableAutostep(old.height!,old.width!,old.dynamic!);else c.disableAutostep();if(old.snap!==null)c.enableSnapToGround(old.snap);else c.disableSnapToGround();c.setMaxSlopeClimbAngle(old.climb);c.setMinSlopeSlideAngle(old.slideAngle);c.setSlideEnabled(old.slide);}
     // KCC may shorten movement or add slope correction. Verify its actual path
     // and endpoint before the game commits it; never return an unchecked slide.
@@ -199,7 +208,8 @@ export class ScooterClearance {
 
   private humanSupport(center: V,expectedY: number): {center: V;ground: ScooterGround} | ScooterBlock {
     const g=this.ground(center.x,center.z,expectedY);if(!g.hit)return g.reason!;
-    for(const [dx,dz]of[[-.22,0],[.22,0],[0,-.22],[0,.22]]){const edge=this.ground(center.x+dx,center.z+dz,expectedY);if(!edge.hit)return edge.reason!;const reason=this.discontinuity(g.hit,edge.hit);if(reason)return reason;}
+    if(g.hit.normal.y<Math.cos(E.maxSlope)-EPS)return 'slope';
+    for(const [dx,dz]of[[-.22,0],[.22,0],[0,-.22],[0,.22]]){const edge=this.ground(center.x+dx,center.z+dz,expectedY);if(!edge.hit)return edge.reason!;if(edge.hit.normal.y<Math.cos(E.maxSlope)-EPS)return 'slope';const reason=this.discontinuity(g.hit,edge.hit);if(reason)return reason;}
     const footGap=E.riderCenterToFeet-E.riderHalfSegment-E.riderRadius;
     return{center:{x:center.x,y:g.hit.point.y+E.riderHalfSegment+E.riderRadius/g.hit.normal.y+footGap,z:center.z},ground:g.hit};
   }

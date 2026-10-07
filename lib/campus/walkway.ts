@@ -1,4 +1,5 @@
 import {applyMainBuildingMaterials} from './main-building-materials';
+import { buildCapitolDome } from './capitol-dome';
 import {applyHistoricGlazing} from './historic-glazing';
 import {applyHistoricMasonry} from './historic-masonry';
 import {engineeringSouthwestSeamTrim} from './engineering-southwest-seam';
@@ -179,6 +180,7 @@ export class SpeedwayWalkway {
   flawn: ReturnType<typeof buildFlawnBuilding>['stats'] | null = null;
   hogg: ReturnType<typeof buildHoggBuilding>['stats'] | null = null;
   union: ReturnType<typeof buildUnionBuilding>['stats'] | null = null;
+  capitolDome: ReturnType<typeof buildCapitolDome>['stats'] | null = null;
   private auxiliaryGeometries: THREE.BufferGeometry[] = [];
   private seamGeometry?: THREE.BufferGeometry;
   private seamMesh?: THREE.Mesh;
@@ -1618,6 +1620,13 @@ export class SpeedwayWalkway {
 
       }
     }
+    if (landscape) {
+      const capitol = buildCapitolDome();
+      this.surfaces.add(...capitol.meshes);
+      for (const geometry of capitol.colliderGeometries) addCollider(geometry);
+      this.materials.push(...capitol.materials); this.volumes.push(...capitol.volumes);
+      this.capitolDome = capitol.stats;
+    }
     this.surfaces.traverse(object => {
       if (object instanceof THREE.Mesh && colliderByGeometry.has(object.geometry))
         this.groundMaskGeometries.add(object.geometry);
@@ -1634,6 +1643,7 @@ export class SpeedwayWalkway {
   snapshot() {
     return {
       mlk:this.mlk,
+      capitolDome:this.capitolDome,
       mallBuildings:this.mallBuildings,
       historicCentral:this.historicCentral,
       garrisonLandscape:this.garrisonLandscape,

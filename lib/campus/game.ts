@@ -215,6 +215,10 @@ export class CampusGame {
       this.offline ? Promise.resolve(null) : gameTilesConfig(this.options.tilesConfig),
     ]);
     if (this.disposed) return;
+    data.landmarks.CAP = { name: 'Texas State Capitol · North grounds',
+      position: [-278.335, 1179.898] };
+    const capitol = data.buildings.find(building => building.id === 533822);
+    if (capitol) { capitol.name = 'Texas State Capitol'; capitol.abbr = 'CAP'; }
     markBoot('world');
     this.physics = new RAPIER.World({ x: 0, y: -24, z: 0 });
     this.physics.timestep = 1 / 60;
