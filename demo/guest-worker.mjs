@@ -1,6 +1,5 @@
 // Cloudflare Pages advanced-mode worker. Only the guest-session route runs here;
 // normal game assets keep using Pages. Secrets are runtime bindings, never assets.
-const DAY = 24 * 60 * 60 * 1000;
 const COOKIE = 'ut-campus-guest-v1';
 const encoder = new TextEncoder();
 const base64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -23,7 +22,7 @@ async function readSession(request, secret, now) {
     if (!await crypto.subtle.verify('HMAC', await signingKey(secret), bytesFrom(signature), encoder.encode(payload))) return false;
     const session = JSON.parse(new TextDecoder().decode(bytesFrom(payload)));
     if (!Number.isSafeInteger(session.startedAt) || session.startedAt > now ||
-      session.expiresAt !== session.startedAt + DAY || typeof session.id !== 'string') return false;
+      typeof session.id !== 'string') return false;
     return session;
   } catch { return false; }
 }
@@ -51,21 +50,20 @@ export function guestHandler({ now = Date.now, upstreamFetch = fetch } = {}) {
     if (!env.GUEST_CESIUM_TOKEN || !env.GUEST_COOKIE_SECRET || env.GUEST_COOKIE_SECRET.length < 32 || env.GUEST_ENABLED !== '1')
       return json({ status: 'unavailable' }, 503);
     const serverNow = now();
+    // Previously signed 24-hour cookies remain valid identifiers. Shared access
+    // now follows provider availability, not the visitor's first-visit date.
     const session = await readSession(request, env.GUEST_COOKIE_SECRET, serverNow);
-    if (session === false || (session && serverNow >= session.expiresAt))
-      return json({ status: 'expired', serverNow }, request.method === 'POST' ? 410 : 200);
     if (!session) {
       if (request.method === 'GET') return json({ status: 'new', serverNow });
-      const created = { id: crypto.randomUUID(), startedAt: serverNow, expiresAt: serverNow + DAY };
+      const created = { id: crypto.randomUUID(), startedAt: serverNow };
       const value = await encodeSession(created, env.GUEST_COOKIE_SECRET);
-      // Keep the expired marker for subsequent visits instead of deleting the
-      // cookie at 24 hours and accidentally granting a fresh trial.
+      // A signed browser identifier avoids provider calls during the handshake.
       const secure = url.protocol === 'https:' ? '; Secure' : '';
-      return json({ status: 'starting', serverNow, expiresAt: created.expiresAt }, 200, {
+      return json({ status: 'starting', serverNow }, 200, {
         'Set-Cookie': `${COOKIE}=${value}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax${secure}`,
       });
     }
-    const access = { status: 'active', expiresAt: session.expiresAt, serverNow };
+    const access = { status: 'active', serverNow };
     if (request.method === 'GET') return json(access);
     try {
       const response = await upstreamFetch('https://api.cesium.com/v1/assets/2275207/endpoint', {
@@ -74,15 +72,12 @@ export function guestHandler({ now = Date.now, upstreamFetch = fetch } = {}) {
         // Manual keeps the bearer on this host; the !ok check rejects redirects.
         cache: 'no-store', redirect: 'manual', signal: AbortSignal.timeout(15000),
       });
-      if (!response.ok) return json({ status: 'unavailable', reason: `provider-${response.status}` }, 503);
+      if (!response.ok) return json({ status: [402, 429].includes(response.status) ? 'quota' : 'unavailable', reason: `provider-${response.status}` }, 503);
       const data = await response.json();
       const endpoint = new URL(data.options?.url);
       if (data.type !== '3DTILES' || !data.externalType || endpoint.protocol !== 'https:' ||
         endpoint.hostname !== 'tile.googleapis.com' || endpoint.pathname !== '/v1/3dtiles/root.json' || !endpoint.searchParams.get('key'))
         return json({ status: 'unavailable', reason: 'provider-endpoint' }, 503);
-      // Recheck after the network request, so a request that straddles expiry
-      // cannot hand out fresh imagery access after the deadline.
-      if (now() >= session.expiresAt) return json({ status: 'expired', serverNow: now() }, 410);
       // The owner's ion token never leaves the worker. Like the existing visitor
       // flow, the Cesium-issued Google endpoint is used only in browser memory.
       return json({ ...access, serverNow: now(), config: { token: '', assetId: 2275207, endpointUrl: endpoint.href } });

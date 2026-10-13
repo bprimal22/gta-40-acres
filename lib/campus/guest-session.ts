@@ -1,8 +1,7 @@
 import type { TilesConfig } from './photoreal';
 
 export type GuestSession = {
-  status: 'active' | 'expired' | 'unavailable' | 'new' | 'starting';
-  expiresAt?: number;
+  status: 'active' | 'quota' | 'unavailable' | 'new' | 'starting';
   serverNow?: number;
   config?: TilesConfig;
 };
@@ -17,10 +16,9 @@ export async function guestSession(start: boolean, signal?: AbortSignal): Promis
       });
       const data = await response.json() as GuestSession;
       if (data.status === 'starting' && start) continue;
-      if (data.status === 'expired') return { status: 'expired' };
-      if (!response.ok || data.status !== 'active' || !Number.isSafeInteger(data.serverNow) ||
-        !Number.isSafeInteger(data.expiresAt) || data.expiresAt! <= data.serverNow! ||
-        data.expiresAt! - data.serverNow! > 86400000) return { status: 'unavailable' };
+      if (data.status === 'quota') return { status: 'quota' };
+      if (!start && data.status === 'new' && response.ok) return { status: 'new' };
+      if (!response.ok || data.status !== 'active' || !Number.isSafeInteger(data.serverNow)) return { status: 'unavailable' };
       if (start) {
         const endpoint = new URL(data.config?.endpointUrl ?? '');
         if (data.config?.assetId !== 2275207 || endpoint.protocol !== 'https:' ||
@@ -30,6 +28,6 @@ export async function guestSession(start: boolean, signal?: AbortSignal): Promis
       }
       return data;
     }
-  } catch { /* Fall back to the existing personal-token setup, never local-only scenery. */ }
+  } catch { /* A temporary outage offers retry; only quota exhaustion prompts for a token. */ }
   return { status: 'unavailable' };
 }

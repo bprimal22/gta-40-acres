@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { TilesConfig } from '@/lib/campus/photoreal';
 import { connectionMessage, readVisitorToken, removeVisitorToken, saveVisitorToken, usesVisitorToken, validateVisitorToken } from '@/lib/campus/visitor-cesium';
 import { guestSession, type GuestSession } from '@/lib/campus/guest-session';
+import { campusAccess } from '@/lib/campus/campus-access';
 
 type State = 'loading' | 'setup' | 'connected' | 'local';
 export function CesiumConnection({ children }: { children: (config?: TilesConfig) => ReactNode }) {
@@ -15,13 +16,12 @@ export function CesiumConnection({ children }: { children: (config?: TilesConfig
   const [origin, setOrigin] = useState('');
   const [saved, setSaved] = useState(false);
   const [guest, setGuest] = useState<GuestSession | null>(null);
-  const deadline = useRef(0);
+  const [manual, setManual] = useState(false);
   const request = useRef<AbortController | null>(null);
 
   function acceptGuest(session: GuestSession) {
     setGuest(session);
     if (session.status === 'active' && session.config) {
-      deadline.current = performance.now() + session.expiresAt! - session.serverNow!;
       setConfig(session.config); setState('connected');
     } else {
       setConfig(undefined); setState('setup');
@@ -37,48 +37,15 @@ export function CesiumConnection({ children }: { children: (config?: TilesConfig
       const query = new URLSearchParams(location.search);
       const offline = query.get('offline') === '1' || ['local', 'procedural'].includes(query.get('visual') ?? '');
       if (offline || !usesVisitorToken()) { setState('local'); return; }
-      try {
-        const token = readVisitorToken(); setSaved(!!token);
-        if (!token) {
-          const session = await guestSession(true, controller.signal);
-          if (!controller.signal.aborted) acceptGuest(session);
-          return;
-        }
-        const validated = await validateVisitorToken(token, controller.signal);
-        if (controller.signal.aborted) return;
-        // Rendering only needs the temporary Google endpoint; keep the visitor
-        // token out of the long-lived game instance.
-        setConfig({ ...validated, token: '' }); setState('connected');
-      } catch (e) {
-        if (!controller.signal.aborted) { setError(connectionMessage(e)); setState('setup'); }
-      }
+      const access = await campusAccess(controller.signal);
+      if (controller.signal.aborted) return;
+      setSaved(access.saved); setGuest(access.session);
+      if (access.config) { setConfig(access.config); setState('connected'); }
+      else { setConfig(undefined); setState('setup'); }
     })();
     return () => request.current?.abort();
   }, []);
 
-  useEffect(() => {
-    if (guest?.status !== 'active') return;
-    const controller = new AbortController();
-    const expire = () => {
-      request.current?.abort(); setBusy(false); setConfig(undefined);
-      setGuest({ status: 'expired' }); setState('setup'); setError('');
-    };
-    const timer = setTimeout(expire, Math.max(0, deadline.current - performance.now()));
-    // Suspended/background tabs can miss timers. Recheck against server time on
-    // return, without downloading a new root tile or extending the trial.
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      if (performance.now() >= deadline.current) { expire(); return; }
-      void guestSession(false, controller.signal).then(session => {
-        if (controller.signal.aborted) return;
-        if (session.status !== 'active') {
-          request.current?.abort(); setBusy(false); setConfig(undefined); setGuest(session); setState('setup');
-        }
-      });
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => { clearTimeout(timer); controller.abort(); document.removeEventListener('visibilitychange', onVisible); };
-  }, [guest]);
 
   async function connect(event?: React.SubmitEvent<HTMLFormElement>, retrySaved = false) {
     event?.preventDefault(); if (busy) return;
@@ -97,7 +64,7 @@ export function CesiumConnection({ children }: { children: (config?: TilesConfig
     const controller = new AbortController(); request.current?.abort(); request.current = controller;
     setBusy(true); setError('');
     const session = await guestSession(true, controller.signal);
-    if (!controller.signal.aborted) { acceptGuest(session); setBusy(false); }
+    if (!controller.signal.aborted) { setManual(false); acceptGuest(session); setBusy(false); }
   }
   function remove() {
     request.current?.abort();
@@ -107,15 +74,15 @@ export function CesiumConnection({ children }: { children: (config?: TilesConfig
   if (state === 'local') return children();
   if (state === 'connected') return <>
     {children(config)}
-    <button className="imagery-settings" onClick={() => { setState('setup'); setError(''); }}>Imagery settings</button>
-    {guest?.status === 'active' && <span className="guest-preview-status">Guest preview · ends {new Date(guest.expiresAt!).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>}
+    <button className="imagery-settings" onClick={() => { setManual(true); setState('setup'); setError(''); }}>Imagery settings</button>
   </>;
   return <main className="connection-shell">
     <section className="connection-card" aria-labelledby="connection-title">
       <span className="eyebrow">UT AUSTIN · CAMPUS EXPLORER</span>
-      <h1 id="connection-title">{state === 'loading' ? 'Connecting to campus…' : guest?.status === 'expired' ? 'Your free preview has ended' : 'Connect campus imagery'}</h1>
+      <h1 id="connection-title">{state === 'loading' ? 'Connecting to campus…' : manual ? 'Imagery settings' : guest?.status === 'quota' ? 'Shared imagery limit reached' : 'Campus imagery is temporarily unavailable'}</h1>
       {state === 'loading' ? <output>Getting your campus access ready.</output> : <>
-        <p>{guest?.status === 'expired' ? 'Your 24-hour guest preview is over. Connect your own Cesium ion token to keep exploring.' : guest?.status === 'active' ? 'Your guest preview is active for 24 hours from your first visit. You can connect your own token at any time.' : guest?.status === 'unavailable' ? 'The guest preview is temporarily unavailable. Try again, or connect your own Cesium ion token.' : 'Use your own Cesium ion token to explore the photographic campus.'}</p>
+        <p>{manual ? 'Shared imagery is available automatically. You can optionally use your own Cesium ion token.' : guest?.status === 'quota' ? 'The shared imagery provider is limiting requests or its allowance is exhausted. Retry later, or connect your own Cesium ion token to keep exploring.' : 'We could not connect to shared campus imagery. Try again in a moment; you do not need to create a Cesium account.'}</p>
+        {(manual || guest?.status === 'quota') && <>
         <form onSubmit={connect}>
           <label htmlFor="cesium-token">Cesium ion access token</label>
           <input id="cesium-token" type="password" autoComplete="off" spellCheck={false} value={value}
@@ -137,8 +104,9 @@ export function CesiumConnection({ children }: { children: (config?: TilesConfig
           <a href="https://cesium.com/learn/ion/cesium-ion-access-tokens/" target="_blank" rel="noreferrer">Cesium token instructions</a>
           {' · '}<a href="https://ion.cesium.com/usage" target="_blank" rel="noreferrer">Check your usage</a>
         </details>
+        </>}
         <div className="connection-secondary">
-          {guest?.status === 'unavailable' && <button type="button" onClick={() => void retryGuest()} disabled={busy}>Retry guest preview</button>}
+          {(guest?.status === 'unavailable' || guest?.status === 'quota') && <button type="button" onClick={() => void retryGuest()} disabled={busy}>Retry campus imagery</button>}
           {saved && !config && <button type="button" onClick={() => void connect(undefined, true)} disabled={busy}>Retry saved token</button>}
           {saved && <button type="button" onClick={remove} disabled={busy}>Remove saved token</button>}
           {config && <button type="button" onClick={() => { setValue(''); setError(''); setState('connected'); }} disabled={busy}>Back to campus</button>}

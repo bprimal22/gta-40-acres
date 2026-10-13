@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import ts from 'typescript';
+let session, stored, personalValid, personalCalls=0;
+globalThis.__accessFixture={guestSession:async()=>session,readVisitorToken:()=>{if(stored instanceof Error)throw stored;return stored;},validateVisitorToken:async()=>{personalCalls++;if(!personalValid)throw Error('invalid');return {token:stored,assetId:2275207,endpointUrl:'https://tile.googleapis.com/v1/3dtiles/root.json?key=personal-fixture'};}};
+const source=(await readFile(new URL('../lib/campus/campus-access.ts',import.meta.url),'utf8')).replace(/^import .*;$/gm,'');
+const js=ts.transpileModule('const {guestSession,readVisitorToken,validateVisitorToken}=globalThis.__accessFixture;\n'+source,{compilerOptions:{target:ts.ScriptTarget.ES2023,module:ts.ModuleKind.ESNext}}).outputText;
+const {campusAccess}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+const config={token:'',assetId:2275207,endpointUrl:'https://tile.googleapis.com/v1/3dtiles/root.json?key=shared-fixture'};
+session={status:'active',config};stored='stale-token';personalValid=false;
+assert.equal((await campusAccess()).config,config);assert.equal(personalCalls,0,'Rejected saved token must not block shared access');
+stored=new Error('storage unavailable');assert.equal((await campusAccess()).config,config);
+session={status:'quota'};stored='valid-personal';personalValid=true;assert.equal((await campusAccess()).session,null);
+personalValid=false;assert.equal((await campusAccess()).session.status,'quota');
+session={status:'unavailable'};stored=null;const unavailable=await campusAccess();assert.equal(unavailable.config,undefined);assert.equal(unavailable.session.status,'unavailable');
+console.log(JSON.stringify({passed:true,coverage:['shared first despite stale saved token','shared works without browser storage','saved personal fallback','quota preserved for token prompt','temporary outage preserved for retry']}));
+delete globalThis.__accessFixture;
