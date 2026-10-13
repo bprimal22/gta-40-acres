@@ -12,6 +12,10 @@ University of Texas at Austin, Rockstar Games, Take-Two Interactive, Google,
 or Cesium. “GTA” is used informally in the project title and does not indicate
 that Grand Theft Auto assets or code are included.
 
+## Shared access
+
+The hosted game automatically uses shared Cesium access while the provider allows requests. There is no first-visit time limit. A saved personal token is used as a fallback if shared access fails; stale saved tokens do not block shared access. Provider quota responses offer a personal-token form, while temporary connection failures offer retry. The owner token stays in Cloudflare runtime bindings and is never bundled. Imagery settings also allow an optional personal token.
+
 ## Run locally
 
 Requirements: Node.js 22.13 or newer.

@@ -18,7 +18,7 @@ const handle = guestHandler({ now: () => clock, upstreamFetch: async (url, optio
 const request = (method = 'POST', cookie, headers = {}) => new Request(origin + '/api/guest-session', { method, headers: { Origin: origin, ...(cookie ? { Cookie: cookie } : {}), ...headers } });
 const first = await handle(request(), env), starting = await first.json();
 assert.equal(starting.status, 'starting'); assert.equal(calls, 0, 'Confirm cookie support before spending imagery requests');
-assert.equal(starting.expiresAt - starting.serverNow, day);
+assert.equal(starting.expiresAt, undefined);
 const setCookie = first.headers.get('set-cookie'), cookie = setCookie.split(';')[0];
 for (const attr of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Max-Age=34560000']) assert.ok(setCookie.includes(attr));
 assert.ok(first.headers.get('Cache-Control').includes('no-store'));
@@ -28,15 +28,18 @@ assert.ok(!JSON.stringify(connected).includes(env.GUEST_CESIUM_TOKEN));
 assert.equal(calls, 1);
 clock += day - 1;
 const returning = await (await handle(request('GET', cookie), env)).json();
-assert.equal(returning.status, 'active'); assert.equal(returning.expiresAt, starting.expiresAt);
+assert.equal(returning.status, 'active'); assert.equal(returning.expiresAt, undefined);
 assert.equal(calls, 1, 'Status checks must not spend another provider request');
-clock += 1;
-const expired = await handle(request('POST', cookie), env);
-assert.equal(expired.status, 410); assert.equal((await expired.json()).status, 'expired');
-assert.equal(calls, 1, 'Exact 24-hour expiry must reject before provider access');
-assert.equal((await (await handle(request('GET', cookie), env)).json()).status, 'expired');
+clock += day * 30;
+assert.equal((await (await handle(request('POST', cookie), env)).json()).status, 'active', 'Shared access does not expire with time');
+assert.equal((await (await handle(request('GET', cookie), env)).json()).status, 'active');
 const tampered = cookie.slice(0, -8) + 'abcdefgh';
-assert.equal((await handle(request('POST', tampered), env)).status, 410);
+assert.equal((await (await handle(request('POST', tampered), env)).json()).status, 'starting');
+// An already expired signed cookie from the previous release must recover.
+const payload = Buffer.from(JSON.stringify({id:'old-visitor',startedAt:clock-day*10,expiresAt:clock-day*9})).toString('base64url');
+const key = await crypto.subtle.importKey('raw',new TextEncoder().encode(env.GUEST_COOKIE_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+const sig = Buffer.from(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(payload))).toString('base64url');
+assert.equal((await (await handle(request('POST','ut-campus-guest-v1='+payload+'.'+sig),env)).json()).status,'active');
 assert.equal((await handle(request('POST', cookie, { Origin: 'https://other.example' }), env)).status, 403);
 assert.equal((await handle(request('POST', cookie, { 'Sec-Fetch-Site': 'cross-site' }), env)).status, 403);
 assert.equal((await handle(new Request(origin + '/api/guest-session', { method: 'POST' }), env)).status, 403);
@@ -51,7 +54,7 @@ endpoint = 'https://other.example/root.json?key=fixture';
 assert.equal((await handle(request('POST', cookie), env)).status, 503);
 endpoint = 'https://tile.googleapis.com/v1/3dtiles/root.json?key=fixture-google-key';
 upstreamStatus = 429;
-assert.equal((await handle(request('POST', cookie), env)).status, 503);
+assert.equal((await (await handle(request('POST', cookie), env)).json()).status, 'quota');
 
 const source = await readFile(new URL('../lib/campus/guest-session.ts', import.meta.url), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText;
@@ -67,11 +70,13 @@ globalThis.fetch = async (url, options) => {
 };
 const guest = await client.guestSession(true);
 assert.equal(guest.status, 'active'); assert.equal(browserCalls, 2);
-const end = guest.expiresAt;
-assert.equal((await client.guestSession(true)).expiresAt, end, 'Reload retains original deadline');
-clock = end;
-assert.equal((await client.guestSession(true)).status, 'expired');
-assert.equal((await client.guestSession(false)).status, 'expired');
+assert.equal(guest.expiresAt,undefined);
+clock += day * 90;
+assert.equal((await client.guestSession(true)).status,'active','Returning visitor remains eligible');
+assert.equal((await client.guestSession(false)).status,'active');
+upstreamStatus=429;assert.equal((await client.guestSession(true)).status,'quota');
+upstreamStatus=503;assert.equal((await client.guestSession(true)).status,'unavailable');
+upstreamStatus=200;
 globalThis.fetch = async () => Response.json({ status: 'starting', serverNow: clock, expiresAt: clock + day });
 assert.equal((await client.guestSession(true)).status, 'unavailable', 'Blocked cookies do not create an endless handshake');
 globalThis.fetch = async () => new Response('<html>old static host</html>');
@@ -106,4 +111,4 @@ try {
   assert.equal((await redirect.json()).reason, 'provider-302');
   assert.equal(runtimeCalls, 2, 'Do not follow redirects with the owner bearer token');
 } finally { await runtime.dispose(); }
-console.log(JSON.stringify({ passed: true, coverage: ['first visit cookie handshake', '24 hours from first visit', 'reload preserves deadline', 'exact expiry blocks provider calls', 'tampered cookie', 'cross-origin rejection', 'disabled/missing secrets', 'provider quota/error', 'owner token stays server-side', 'no API caching', 'static routing', 'browser API handshake', 'blocked cookies', 'expired browser response', 'unsupported endpoint', 'Cloudflare runtime request compatibility', 'redirect rejection without credential forwarding'], liveProviderCalls: 0 }));
+console.log(JSON.stringify({ passed: true, coverage: ['first visit cookie handshake', 'shared access has no time cutoff', 'returning visitor', 'legacy expired cookie recovery', 'tampered cookie re-handshake', 'cross-origin rejection', 'disabled/missing secrets', 'provider quota/error', 'owner token stays server-side', 'no API caching', 'static routing', 'browser API handshake', 'blocked cookies', 'quota distinguished from temporary outage', 'unsupported endpoint', 'Cloudflare runtime request compatibility', 'redirect rejection without credential forwarding'], liveProviderCalls: 0 }));
